@@ -331,7 +331,7 @@ function spawnPlayer(player) {
 }
 
 function spawnEntity(entity, row, col) {
-    if (isValidPos(row, col)) {
+    if (isValidPos(row, col) && getEntityAt(row, col, entityLayer) === null) {
         entity.pos_row = row
         entity.pos_col = col
         console.log(`[SPAWN] Entity spawned at (${row}, ${col})`)
@@ -441,7 +441,7 @@ for (let i = 0; i < 3; i++) {
 }
 
 // BOSS
-entityLayer.push(new Enemy("BOSS", 100, 50, 10, "purple"))
+entityLayer.push(new Enemy("BOSS", 60, 20, 10, "purple"))
 
 // Items
 entityLayer.push(new Key("gold_key", "gold", 1, 14));
@@ -452,7 +452,7 @@ entityLayer.push(new Gold(50, 2, 8));
 // Structures
 entityLayer.push(new Door(5, 12, "gold_key"));
 entityLayer.push(new Door(3, 12, "silver_key"));
-entityLayer.push(new Chest(3, 6, [new Gold(100), new Key("boss_key", "red", -1, -1)]));
+entityLayer.push(new Chest(3, 6, [new Gold(100), new Potion("Health Potion", 50, -1, -1)]));
 
 let enemyCount = 0;
 let itemCount = 0;

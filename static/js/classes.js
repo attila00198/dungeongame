@@ -225,6 +225,9 @@ class Chest extends GameObject {
             } else if (item instanceof Key) {
                 player.inventory.push(item.name);
                 console.log(`[CHEST] Found ${item.name}`);
+            } else if (item instanceof Potion) {
+                item.onPickup(player)
+                console.log(`[CHEST] Found ${item.name}`);
             }
         }
         console.log(`[CHEST] Opened!`);
