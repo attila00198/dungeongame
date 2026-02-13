@@ -48,18 +48,20 @@ let tileSize = Math.min(tileWidth, tileHeight)
 
 // ============ GAME STATE ============
 let gameState = {
+    inDebugMode: false,
     player: null,
     inCombat: false,
     currentEnemy: null,
     gameOver: false,
     playerWon: false,
-    inDebugMode: false
+    showInfo: false,
+    infoMessage: "",
+    infoTimeout: null
 }
 
 let entityLayer = []
 
 // ============ HELPER FUNCTIONS ============
-
 function isValidPos(row, col) {
     if (row < 0 || row >= GRID_HEIGHT) return false
     if (col < 0 || col >= GRID_WIDTH) return false
@@ -80,7 +82,6 @@ function isInViewRange(entity, player) {
 }
 
 function hasLineOfSight(entity, player) {
-    // 1. Gyors tÃ¡volsÃ¡g ellenÅ‘rzÃ©s
     if (!isInViewRange(entity, player)) return false;
 
     let x1 = player.pos_col;
@@ -91,17 +92,13 @@ function hasLineOfSight(entity, player) {
     let dx = x2 - x1;
     let dy = y2 - y1;
 
-    // TÃ¶bb mintavÃ©teli pont kell, hogy ne "ugorjunk Ã¡t" falon
-    // A tÃ¡volsÃ¡g kÃ©tszeresÃ©t nÃ©zzÃ¼k, hogy sÅ±rÅ±bb legyen a mintavÃ©tel
     let steps = Math.max(Math.abs(dx), Math.abs(dy)) * 2;
 
     if (steps === 0) return true;
 
     for (let i = 1; i <= steps; i++) {
-        // t Ã©rtÃ©ke 0 Ã©s 1 kÃ¶zÃ¶tt mozog (szÃ¡zalÃ©kosan hol tartunk az Ãºton)
         let t = i / steps;
 
-        // LineÃ¡ris interpolÃ¡ciÃ³ (LERP)
         let currX = x1 + dx * t;
         let currY = y1 + dy * t;
 
@@ -160,8 +157,47 @@ function getRandomWalkablePos(minDistanceFrom = null, minDist = 3) {
     return { row: -1, col: -1, success: false }
 }
 
-// ============ DRAW FUNCTIONS ============
+function spawnPlayer(player) {
+    for (let row = 0; row < grid.length; row++) {
+        for (let col = 0; col < grid[row].length; col++) {
+            if (grid[row][col] === TILE_TYPE.SPAWN) {
+                player.pos_row = row
+                player.pos_col = col
+                console.log(`[SPAWN] Player spawned at (${col}, ${row})`)
+                return true
+            }
+        }
+    }
+    console.error("[ERROR] No spawn point found!")
+    return false
+}
 
+function spawnEntity(entity, row, col) {
+    if (isValidPos(row, col) && getEntityAt(row, col, entityLayer) === null) {
+        entity.pos_row = row
+        entity.pos_col = col
+        console.log(`[SPAWN] Entity spawned at (${row}, ${col})`)
+        return true
+    }
+    console.error(`[ERROR] Cannot spawn at (${row}, ${col})`)
+    return false
+}
+
+function spawnEntityRandom(entity, minDistanceFrom = null) {
+    let pos = getRandomWalkablePos(minDistanceFrom, 3)
+
+    if (pos.success) {
+        entity.pos_row = pos.row
+        entity.pos_col = pos.col
+        console.log(`[SPAWN] Entity spawned at (${pos.row}, ${pos.col})`)
+        return true
+    }
+
+    console.error("[ERROR] Could not find valid spawn position")
+    return false
+}
+
+// ============ DRAW FUNCTIONS ============
 function clearCanvas() {
     ctx.fillStyle = BG_COLOR
     ctx.fillRect(0, 0, width, height)
@@ -183,7 +219,6 @@ function drawFrame(x, y, w, h, offset, color = "orange", thickness = 2) {
     ctx.strokeStyle = color;
     ctx.lineWidth = thickness;
 
-    // KiszÃ¡moljuk a belsÅ‘ keret pontos koordinÃ¡tÃ¡it
     let innerX = x + offset;
     let innerY = y + offset;
     let innerW = w - (offset * 2);
@@ -251,7 +286,6 @@ function drawCombatScene(player, enemy) {
     let padding = 100;
     let entitySize = 100;
 
-    // --- JÃTÃ‰KOS OLDAL ---
     let pX = cx + padding;
     let pY = cy + shScaled / 2;
 
@@ -267,7 +301,6 @@ function drawCombatScene(player, enemy) {
     drawText(`ATK: ${player.atk}`, pX, pY - 30, "14px", "white", "left", "Consolas");
     drawText(`DEF: ${player.def}`, pX, pY - 15, "14px", "white", "left", "Consolas");
 
-    // --- ELLENSÃ‰G OLDAL ---
     let eX = cx + swScaled - padding - entitySize;
     let eY = cy + shScaled / 2;
 
@@ -283,7 +316,6 @@ function drawCombatScene(player, enemy) {
     drawText(`ATK: ${enemy.atk}`, eX + entitySize, eY - 30, "14px", "white", "right", "Consolas");
     drawText(`DEF: ${enemy.def}`, eX + entitySize, eY - 15, "14px", "white", "right", "Consolas");
 
-    // Log Ã¼zenet
     drawText(gameState.combatLog, cx + swScaled / 2, cy + shScaled - 40, "italic 16px", "gold");
 }
 
@@ -315,48 +347,56 @@ function updateInfoPanel() {
     }
 }
 
-function spawnPlayer(player) {
-    for (let row = 0; row < grid.length; row++) {
-        for (let col = 0; col < grid[row].length; col++) {
-            if (grid[row][col] === TILE_TYPE.SPAWN) {
-                player.pos_row = row
-                player.pos_col = col
-                console.log(`[SPAWN] Player spawned at (${col}, ${row})`)
-                return true
-            }
-        }
-    }
-    console.error("[ERROR] No spawn point found!")
-    return false
+function drawVictoryScreen() {
+    let swScaled = width * 0.6;
+    let shScaled = height * 0.4;
+    let cx = (width - swScaled) / 2;
+    let cy = (height - shScaled) / 2;
+
+    drawRect(cx, cy, swScaled, shScaled, "#1a4d1a");
+    drawFrame(cx, cy, swScaled, shScaled, 20, "gold", 4);
+    drawText("VICTORY!", cx + swScaled / 2, cy + shScaled / 2 - 20, "bold 32px", "gold");
+    drawText("You escaped the dungeon!", cx + swScaled / 2, cy + shScaled / 2 + 20, "18px", "white");
 }
 
-function spawnEntity(entity, row, col) {
-    if (isValidPos(row, col) && getEntityAt(row, col, entityLayer) === null) {
-        entity.pos_row = row
-        entity.pos_col = col
-        console.log(`[SPAWN] Entity spawned at (${row}, ${col})`)
-        return true
-    }
-    console.error(`[ERROR] Cannot spawn at (${row}, ${col})`)
-    return false
+function drawGameOverScreen() {
+    let swScaled = width * 0.6;
+    let shScaled = height * 0.4;
+    let cx = (width - swScaled) / 2;
+    let cy = (height - shScaled) / 2;
+
+    drawRect(cx, cy, swScaled, shScaled, "#4d1a1a");
+    drawFrame(cx, cy, swScaled, shScaled, 20, "darkred", 4);
+    drawText("GAME OVER", cx + swScaled / 2, cy + shScaled / 2 - 20, "bold 32px", "red");
+    drawText("You have been defeated...", cx + swScaled / 2, cy + shScaled / 2 + 20, "18px", "white");
 }
 
-function spawnEntityRandom(entity, minDistanceFrom = null) {
-    let pos = getRandomWalkablePos(minDistanceFrom, 3)
+function showInfoMessage(message, duration = 2000) {
+    gameState.showInfo = true;
+    gameState.infoMessage = message;
 
-    if (pos.success) {
-        entity.pos_row = pos.row
-        entity.pos_col = pos.col
-        console.log(`[SPAWN] Entity spawned at (${pos.row}, ${pos.col})`)
-        return true
+    if (gameState.infoTimeout) {
+        clearTimeout(gameState.infoTimeout);
     }
 
-    console.error("[ERROR] Could not find valid spawn position")
-    return false
+    gameState.infoTimeout = setTimeout(() => {
+        gameState.showInfo = false;
+        gameState.infoMessage = "";
+    }, duration);
+}
+
+function drawInfoScreen() {
+    let swScaled = width * 0.6;
+    let shScaled = height * 0.15;
+    let cx = (width - swScaled) / 2;
+    let cy = height - shScaled - 40; // Lent-középen
+
+    drawRect(cx, cy, swScaled, shScaled, "#1a1a4d");
+    drawFrame(cx, cy, swScaled, shScaled, 10, "cyan", 3);
+    drawText(gameState.infoMessage, cx + swScaled / 2, cy + shScaled / 2 + 5, "16px", "white");
 }
 
 // ============ EVENT HANDLING ============
-
 function handleCombatAction() {
     if (!gameState.inCombat || gameState.combatTurn !== "player") return;
 
@@ -432,121 +472,99 @@ window.addEventListener("keydown", (e) => {
 
 
 // ============ INITIALIZATION ============
+window.onload = () => {
+    gameState.player = new Player("green");
 
-gameState.player = new Player("green");
-
-// Enemies
-for (let i = 0; i < 3; i++) {
-    entityLayer.push(new Enemy(`Goblin_${i + 1}`, 30, 10, 5, "red"));
-}
-
-// BOSS
-entityLayer.push(new Enemy("BOSS", 60, 20, 10, "purple"))
-
-// Items
-entityLayer.push(new Key("gold_key", "gold", 1, 14));
-entityLayer.push(new Key("silver_key", "silver", 4, 9));
-entityLayer.push(new Potion("Health Potion", 30, 6, 4));
-entityLayer.push(new Gold(50, 2, 8));
-
-// Structures
-entityLayer.push(new Door(5, 12, "gold_key"));
-entityLayer.push(new Door(3, 12, "silver_key"));
-entityLayer.push(new Chest(3, 6, [new Gold(100), new Potion("Health Potion", 50, -1, -1)]));
-
-let enemyCount = 0;
-let itemCount = 0;
-let structureCount = 0;
-
-for (let e of entityLayer) {
-    if (e instanceof Enemy) enemyCount++;
-    if (e instanceof Item) itemCount++;
-    if (e instanceof Structure) structureCount++;
-}
-
-console.log("[Debug]: Enemy count:", enemyCount);
-console.log("[Debug]: Item count:", itemCount);
-console.log("[Debug]: Structure count:", structureCount);
-
-// Spawn player
-if (gameState.player) spawnPlayer(gameState.player);
-
-// Spawn enemies randomly
-for (let e of entityLayer) {
-    if (e instanceof Enemy) spawnEntityRandom(e, gameState.player);
-}
-
-// Items és Structures már fix pozícióval jönnek létre, nem kell spawn-olni őket
-
-// ============ GAME LOOP ============
-
-function gameLoop() {
-    clearCanvas();
-
-    // Game Over check
-    if (gameState.gameOver) {
-        drawGameOverScreen();
-        return;
+    // Enemies
+    for (let i = 0; i < 3; i++) {
+        entityLayer.push(new Enemy(`Goblin_${i + 1}`, 30, 10, 5, "red"));
     }
 
-    // Victory check
-    if (gameState.playerWon) {
-        drawVictoryScreen();
-        return;
-    }
+    // BOSS
+    entityLayer.push(new Enemy("BOSS", 60, 20, 10, "purple"))
 
-    drawMap();
+    // Items
+    entityLayer.push(new Key("gold_key", "gold", 1, 14));
+    entityLayer.push(new Key("silver_key", "silver", 4, 9));
+    entityLayer.push(new Potion("Health Potion", 30, 6, 4));
+    entityLayer.push(new Gold(50, 2, 8));
 
-    if (gameState.inDebugMode) {
-        drawGrid();
-    }
+    // Structures
+    entityLayer.push(new Door(5, 12, "gold_key"));
+    entityLayer.push(new Door(3, 12, "silver_key"));
+    entityLayer.push(new Chest(3, 6, [new Gold(100), new Potion("Health Potion", 50, -1, -1)]));
 
-    // Entities renderelése típus szerint
+    let enemyCount = 0;
+    let itemCount = 0;
+    let structureCount = 0;
+
     for (let e of entityLayer) {
-        // Structures mindig látszanak (ajtók, ládák)
-        if (e instanceof Structure) {
-            drawEntity(e);
+        if (e instanceof Enemy) enemyCount++;
+        if (e instanceof Item) itemCount++;
+        if (e instanceof Structure) structureCount++;
+    }
+
+    console.log("[Debug]: Enemy count:", enemyCount);
+    console.log("[Debug]: Item count:", itemCount);
+    console.log("[Debug]: Structure count:", structureCount);
+
+    // Spawn player
+    if (gameState.player) spawnPlayer(gameState.player);
+
+    // Spawn enemies randomly
+    for (let e of entityLayer) {
+        if (e instanceof Enemy) spawnEntityRandom(e, gameState.player);
+    }
+
+    // ============ GAME LOOP ============
+    function gameLoop() {
+        clearCanvas();
+
+        // Game Over check
+        if (gameState.gameOver) {
+            drawGameOverScreen();
+            return;
         }
-        // Többi csak ha a játékos látja
-        else if (gameState.player != null && hasLineOfSight(e, gameState.player)) {
-            drawEntity(e);
+
+        // Victory check
+        if (gameState.playerWon) {
+            drawVictoryScreen();
+            return;
         }
+
+        drawMap();
+
+        if (gameState.inDebugMode) {
+            drawGrid();
+        }
+
+        // Entities renderelése típus szerint
+        for (let e of entityLayer) {
+            // Structures mindig látszanak (ajtók, ládák)
+            if (e instanceof Structure) {
+                drawEntity(e);
+            }
+            // Többi csak ha a játékos látja
+            else if (gameState.player != null && hasLineOfSight(e, gameState.player)) {
+                drawEntity(e);
+            }
+        }
+
+        // Játékos mindig felül
+        if (gameState.player) {
+            drawEntity(gameState.player);
+        }
+
+        if (gameState.inCombat) {
+            drawCombatScene(gameState.player, gameState.currentEnemy);
+        }
+
+        if (gameState.showInfo) {
+            drawInfoScreen();
+        }
+
+        updateInfoPanel();
+        requestAnimationFrame(gameLoop);
     }
-
-    // Játékos mindig felül
-    if (gameState.player) {
-        drawEntity(gameState.player);
-    }
-
-    if (gameState.inCombat) {
-        drawCombatScene(gameState.player, gameState.currentEnemy);
-    }
-
-    updateInfoPanel();
-    requestAnimationFrame(gameLoop);
-}
-gameLoop();
-
-function drawVictoryScreen() {
-    let swScaled = width * 0.6;
-    let shScaled = height * 0.4;
-    let cx = (width - swScaled) / 2;
-    let cy = (height - shScaled) / 2;
-
-    drawRect(cx, cy, swScaled, shScaled, "#1a4d1a");
-    drawFrame(cx, cy, swScaled, shScaled, 20, "gold", 4);
-    drawText("VICTORY!", cx + swScaled / 2, cy + shScaled / 2 - 20, "bold 32px", "gold");
-    drawText("You escaped the dungeon!", cx + swScaled / 2, cy + shScaled / 2 + 20, "18px", "white");
-}
-
-function drawGameOverScreen() {
-    let swScaled = width * 0.6;
-    let shScaled = height * 0.4;
-    let cx = (width - swScaled) / 2;
-    let cy = (height - shScaled) / 2;
-
-    drawRect(cx, cy, swScaled, shScaled, "#4d1a1a");
-    drawFrame(cx, cy, swScaled, shScaled, 20, "darkred", 4);
-    drawText("GAME OVER", cx + swScaled / 2, cy + shScaled / 2 - 20, "bold 32px", "red");
-    drawText("You have been defeated...", cx + swScaled / 2, cy + shScaled / 2 + 20, "18px", "white");
+    gameLoop();
 }

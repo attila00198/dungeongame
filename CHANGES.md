@@ -85,7 +85,10 @@ let gameState = {
     inCombat: false,
     currentEnemy: null,
     gameOver: false,    // ✅ ÚJ
-    playerWon: false    // ✅ ÚJ
+    playerWon: false,   // ✅ ÚJ
+    showInfo: false,    // ✅ ÚJ
+    infoMessage: "",    // ✅ ÚJ
+    infoTimeout: null   // ✅ ÚJ
 }
 ```
 
@@ -96,6 +99,8 @@ let gameState = {
 #### Új függvények
 - `drawVictoryScreen()`: Győzelmi képernyő
 - `drawGameOverScreen()`: Vereség képernyő
+- `showInfoMessage(message, duration)`: Info üzenet megjelenítése
+- `drawInfoScreen()`: Info panel renderelése (lent-középen)
 
 #### GameLoop módosítások
 - Game Over check az elején
@@ -143,6 +148,17 @@ entityLayer.push(new Chest(5, 10, [new Gold(100)]));
 - **Victory**: EXIT tile-ra lépéskor `gameState.playerWon = true`
 - **Game Over**: HP <= 0 esetén `gameState.gameOver = true`
 - Mindkét esetben megáll a játék, képernyő jelenik meg
+
+### Info Screen (Lent-középen)
+- **Locked Door**: "Locked! Need: [kulcs neve]"
+- **Door Opened**: "Door opened with [kulcs neve]"
+- **Item Pickup**:
+  - Key: "Picked up: [kulcs neve]"
+  - Potion: "+[HP mennyiség] HP ([potion neve])"
+  - Gold: "+[mennyiség] gold"
+- **Chest Opening**: "Chest opened! Found: [tartalom lista]"
+- **Already Opened**: "Chest already opened"
+- Automatikusan eltűnik 2 másodperc után
 
 ## Debug információk
 

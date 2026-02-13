@@ -70,8 +70,10 @@ class Player extends Actor {
             if (collision instanceof Door) {
                 if (collision.canOpen(this)) {
                     collision.open();
+                    showInfoMessage(`Door opened with ${collision.requiredKey}`);
                     // Folytatja a mozgást
                 } else {
+                    showInfoMessage(`Locked! Need: ${collision.requiredKey}`);
                     return { moved: false, reason: "locked_door", entity: collision };
                 }
             }
@@ -146,6 +148,7 @@ class Key extends Item {
 
     onPickup(player) {
         player.inventory.push(this.name);
+        showInfoMessage(`Picked up: ${this.name}`);
         console.log(`[PICKUP] ${player.constructor.name} collected ${this.name}`);
     }
 }
@@ -158,9 +161,11 @@ class Potion extends Item {
 
     onPickup(player) {
         if (player.health === 100) return
+
         let oldHealth = player.health;
         player.health = Math.min(player.health + this.healAmount, 100);
         let actualHeal = player.health - oldHealth;
+        showInfoMessage(`+${actualHeal} HP (${this.name})`);
         console.log(`[PICKUP] Healed ${actualHeal} HP`);
     }
 }
@@ -173,6 +178,7 @@ class Gold extends Item {
 
     onPickup(player) {
         player.gold += this.amount;
+        showInfoMessage(`+${this.amount} gold`);
         console.log(`[PICKUP] +${this.amount} gold`);
     }
 }
@@ -212,24 +218,30 @@ class Chest extends GameObject {
 
     open(player) {
         if (this.isOpen) {
+            showInfoMessage("Chest already opened");
             console.log("[CHEST] Already opened");
             return;
         }
         this.isOpen = true;
         this.color = "#664400";
 
+        let itemNames = [];
         for (let item of this.contents) {
             if (item instanceof Gold) {
                 player.gold += item.amount;
+                itemNames.push(`${item.amount} gold`);
                 console.log(`[CHEST] Found ${item.amount} gold`);
             } else if (item instanceof Key) {
                 player.inventory.push(item.name);
+                itemNames.push(item.name);
                 console.log(`[CHEST] Found ${item.name}`);
             } else if (item instanceof Potion) {
-                item.onPickup(player)
+                item.onPickup(player);
+                itemNames.push(item.name);
                 console.log(`[CHEST] Found ${item.name}`);
             }
         }
+        showInfoMessage(`Chest opened! Found: ${itemNames.join(", ")}`);
         console.log(`[CHEST] Opened!`);
     }
 }
