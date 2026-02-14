@@ -141,6 +141,11 @@ function getRandomWalkablePos(minDistanceFrom = null, minDist = 3) {
             continue
         }
 
+        if (getEntityAt(row, col, entityLayer) !== null) {
+            attempts++
+            continue
+        }
+
         if (minDistanceFrom) {
             let distance = Math.abs(row - minDistanceFrom.pos_row) +
                 Math.abs(col - minDistanceFrom.pos_col)
@@ -324,6 +329,9 @@ function drawEntity(entity) {
         let cx = entity.pos_col * tileSize + (tileSize - entity.size) / 2
         let cy = entity.pos_row * tileSize + (tileSize - entity.size) / 2
         drawRect(cx, cy, entity.size, entity.size, entity.color)
+        if (gameState.inDebugMode) {
+            drawText(`${entity.pos_row}:${entity.pos_col}`, cx + entity.size / 2, cy + entity.size / 2, "16px", "white", "center")
+        }
     }
 }
 
@@ -547,6 +555,8 @@ window.onload = () => {
             // Többi csak ha a játékos látja
             else if (gameState.player != null && hasLineOfSight(e, gameState.player)) {
                 drawEntity(e);
+            } else if (gameState.player != null && gameState.inDebugMode) {
+                drawEntity(e)
             }
         }
 
