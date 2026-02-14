@@ -490,58 +490,72 @@ window.addEventListener("keydown", (e) => {
 window.onload = () => {
     gameState.player = new Player("green");
 
-    // Enemies
-    for (let i = 0; i < 3; i++) {
-        entityLayer.push(new Enemy(`Goblin_${i + 1}`, 30, 10, 5, "red"));
+    // 1. Spawn player FIRST
+    if (!spawnPlayer(gameState.player)) {
+        console.error("[FATAL] Could not spawn player!");
+        return;
     }
 
-    // BOSS
-    entityLayer.push(new Enemy("BOSS", 60, 20, 10, "purple"))
+    // 2. Define and spawn FIXED position entities
+    const fixedEntities = [
+        // Items
+        { entity: new Key("gold_key", "gold", 1, 14), row: 1, col: 14 },
+        { entity: new Key("silver_key", "silver", 4, 9), row: 4, col: 9 },
+        { entity: new Potion("Health Potion", 30, 6, 4), row: 6, col: 4 },
+        { entity: new Gold(50, 2, 8), row: 2, col: 8 },
 
-    // Items
-    entityLayer.push(new Key("gold_key", "gold", 1, 14));
-    entityLayer.push(new Key("silver_key", "silver", 4, 9));
-    entityLayer.push(new Potion("Health Potion", 30, 6, 4));
-    entityLayer.push(new Gold(50, 2, 8));
+        // Structures
+        { entity: new Door(5, 12, "gold_key"), row: 5, col: 12 },
+        { entity: new Door(3, 12, "silver_key"), row: 3, col: 12 },
+        { entity: new Chest(3, 6, [new Gold(100), new Potion("Health Potion", 50, -1, -1)]), row: 3, col: 6 },
+    ];
 
-    // Structures
-    entityLayer.push(new Door(5, 12, "gold_key"));
-    entityLayer.push(new Door(3, 12, "silver_key"));
-    entityLayer.push(new Chest(3, 6, [new Gold(100), new Potion("Health Potion", 50, -1, -1)]));
+    for (let config of fixedEntities) {
+        if (spawnEntity(config.entity, config.row, config.col)) {
+            entityLayer.push(config.entity);
+        } else {
+            console.warn(`[SPAWN] Failed to spawn at (${config.row}, ${config.col})`);
+        }
+    }
 
-    let enemyCount = 0;
-    let itemCount = 0;
-    let structureCount = 0;
+    // 3. Define and spawn RANDOM position enemies
+    const randomEnemies = [
+        new Enemy("Goblin_1", 30, 10, 5, "red"),
+        new Enemy("Goblin_2", 30, 10, 5, "red"),
+        new Enemy("Goblin_3", 30, 10, 5, "red"),
+        new Enemy("BOSS", 60, 20, 10, "purple"),
+    ];
 
+    for (let enemy of randomEnemies) {
+        if (spawnEntityRandom(enemy, gameState.player)) {
+            entityLayer.push(enemy);
+        } else {
+            console.warn(`[SPAWN] Failed to spawn ${enemy.name} randomly`);
+        }
+    }
+
+    // 4. Stats logging
+    let stats = { enemies: 0, items: 0, structures: 0 };
     for (let e of entityLayer) {
-        if (e instanceof Enemy) enemyCount++;
-        if (e instanceof Item) itemCount++;
-        if (e instanceof Structure) structureCount++;
+        if (e instanceof Enemy) stats.enemies++;
+        else if (e instanceof Item) stats.items++;
+        else if (e instanceof Structure) stats.structures++;
     }
 
-    console.log("[Debug]: Enemy count:", enemyCount);
-    console.log("[Debug]: Item count:", itemCount);
-    console.log("[Debug]: Structure count:", structureCount);
-
-    // Spawn player
-    if (gameState.player) spawnPlayer(gameState.player);
-
-    // Spawn enemies randomly
-    for (let e of entityLayer) {
-        if (e instanceof Enemy) spawnEntityRandom(e, gameState.player);
-    }
+    console.log(`[SPAWN] Loaded ${entityLayer.length} entities:`);
+    console.log(`  - ${stats.enemies} enemies`);
+    console.log(`  - ${stats.items} items`);
+    console.log(`  - ${stats.structures} structures`);
 
     // ============ GAME LOOP ============
     function gameLoop() {
         clearCanvas();
 
-        // Game Over check
         if (gameState.gameOver) {
             drawGameOverScreen();
             return;
         }
 
-        // Victory check
         if (gameState.playerWon) {
             drawVictoryScreen();
             return;
@@ -553,9 +567,16 @@ window.onload = () => {
             drawGrid();
         }
 
-        drawEntityLayer(entityLayer)
+        for (let e of entityLayer) {
+            if (e instanceof Structure) {
+                drawEntity(e);
+            } else if (gameState.player != null && hasLineOfSight(e, gameState.player)) {
+                drawEntity(e);
+            } else if (gameState.player != null && gameState.inDebugMode) {
+                drawEntity(e);
+            }
+        }
 
-        // Játékos mindig felül
         if (gameState.player) {
             drawEntity(gameState.player);
         }
