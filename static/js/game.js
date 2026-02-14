@@ -48,7 +48,7 @@ let tileSize = Math.min(tileWidth, tileHeight)
 
 // ============ GAME STATE ============
 let gameState = {
-    inDebugMode: false,
+    inDebugMode: true,
     player: null,
     inCombat: false,
     currentEnemy: null,
@@ -336,10 +336,17 @@ function drawEntity(entity) {
 }
 
 function drawEntityLayer(entityList) {
-    for (let entity of entityList) {
-        // Csak akkor rajzoljuk, ha a jÃ¡tÃ©kos lÃ¡tja (nincs fal Ã©s tÃ¡volsÃ¡gon belÃ¼l van)
-        if (hasLineOfSight(entity, gameState.player)) {
-            drawEntity(entity);
+    // Entities renderelése típus szerint
+    for (let e of entityLayer) {
+        // Structures mindig látszanak (ajtók, ládák)
+        if (e instanceof Structure) {
+            drawEntity(e);
+        }
+        // Többi csak ha a játékos látja
+        else if (gameState.player != null && hasLineOfSight(e, gameState.player)) {
+            drawEntity(e);
+        } else if (gameState.player != null && gameState.inDebugMode) {
+            drawEntity(e)
         }
     }
 }
@@ -546,19 +553,7 @@ window.onload = () => {
             drawGrid();
         }
 
-        // Entities renderelése típus szerint
-        for (let e of entityLayer) {
-            // Structures mindig látszanak (ajtók, ládák)
-            if (e instanceof Structure) {
-                drawEntity(e);
-            }
-            // Többi csak ha a játékos látja
-            else if (gameState.player != null && hasLineOfSight(e, gameState.player)) {
-                drawEntity(e);
-            } else if (gameState.player != null && gameState.inDebugMode) {
-                drawEntity(e)
-            }
-        }
+        drawEntityLayer(entityLayer)
 
         // Játékos mindig felül
         if (gameState.player) {
