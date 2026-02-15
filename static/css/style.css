@@ -6,6 +6,7 @@ body {
     border: none;
     font-size: 16pt;
     font-family: 'Courier New', Courier, monospace;
+    background-color: #0a0a0a;
 }
 
 .container {
@@ -42,4 +43,9 @@ body {
     display: block;
     padding: 5px 10px;
     background-color: #303030;
+}
+
+#gameTab {
+    width: fit-content;
+    margin: 0 auto;
 }

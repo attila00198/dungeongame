@@ -39,8 +39,8 @@ const TILE_TYPE = {
 }
 
 const WALKABLE_TILES = [TILE_TYPE.EMPTY, TILE_TYPE.EXIT, TILE_TYPE.SPAWN]
-const GRID_WIDTH = grid[0].length
-const GRID_HEIGHT = grid.length
+let GRID_WIDTH = grid[0].length
+let GRID_HEIGHT = grid.length
 
 let tileWidth = width / GRID_WIDTH
 let tileHeight = height / GRID_HEIGHT
@@ -48,7 +48,7 @@ let tileSize = Math.min(tileWidth, tileHeight)
 
 // ============ GAME STATE ============
 let gameState = {
-    inDebugMode: true,
+    inDebugMode: false,
     player: null,
     inCombat: false,
     currentEnemy: null,
@@ -72,10 +72,10 @@ function isInViewRange(entity, player) {
     let dx = entity.pos_col - player.pos_col
     let dy = entity.pos_row - player.pos_row
 
-    // Manhattan tÃ¡volsÃ¡g (egyszerÅ±bb, gyorsabb)
+    // Manhattan távolság (egyszerűbb, gyorsabb)
     let distance = Math.abs(dx) + Math.abs(dy)
 
-    // VAGY Euclidean tÃ¡volsÃ¡g (pontosabb kÃ¶r alakÃº lÃ¡tÃ³tÃ¡v)
+    // VAGY Euclidean távolság (pontosabb kör alakú látótáv)
     // let distance = Math.sqrt(dx * dx + dy * dy)
 
     return distance <= VIEW_DISTANCE
@@ -137,11 +137,6 @@ function getRandomWalkablePos(minDistanceFrom = null, minDist = 3) {
         let col = Math.floor(Math.random() * GRID_WIDTH)
 
         if (!isValidPos(row, col)) {
-            attempts++
-            continue
-        }
-
-        if (getEntityAt(row, col, entityLayer) !== null) {
             attempts++
             continue
         }
@@ -329,24 +324,14 @@ function drawEntity(entity) {
         let cx = entity.pos_col * tileSize + (tileSize - entity.size) / 2
         let cy = entity.pos_row * tileSize + (tileSize - entity.size) / 2
         drawRect(cx, cy, entity.size, entity.size, entity.color)
-        if (gameState.inDebugMode) {
-            drawText(`${entity.pos_row}:${entity.pos_col}`, cx + entity.size / 2, cy + entity.size / 2, "16px", "white", "center")
-        }
     }
 }
 
 function drawEntityLayer(entityList) {
-    // Entities renderelése típus szerint
-    for (let e of entityLayer) {
-        // Structures mindig látszanak (ajtók, ládák)
-        if (e instanceof Structure) {
-            drawEntity(e);
-        }
-        // Többi csak ha a játékos látja
-        else if (gameState.player != null && hasLineOfSight(e, gameState.player)) {
-            drawEntity(e);
-        } else if (gameState.player != null && gameState.inDebugMode) {
-            drawEntity(e)
+    for (let entity of entityList) {
+        // Csak akkor rajzoljuk, ha a játékos látja (nincs fal és távolságon belül van)
+        if (hasLineOfSight(entity, gameState.player)) {
+            drawEntity(entity);
         }
     }
 }
@@ -457,15 +442,15 @@ function handleCombatAction() {
 window.addEventListener("keydown", (e) => {
     if (e.repeat) return;
 
-    // HARC ALATTI IRÃNYÃTÃS
+    // HARC ALATTI IRÁNYÍTÁS
     if (gameState.inCombat) {
         if (e.key === " ") {
             handleCombatAction();
         }
-        return; // Harc kÃ¶zben nem mozgunk a pÃ¡lyÃ¡n
+        return; // Harc közben nem mozgunk a pályán
     }
 
-    // FELFEDEZÃ‰S ALATTI IRÃNYÃTÃS (MozgÃ¡s)
+    // FELFEDEZÉS ALATTI IRÁNYÍTÁS (Mozgás)
     let direction = null;
     if (e.key === "w") direction = "up";
     if (e.key === "s") direction = "down";
@@ -490,72 +475,58 @@ window.addEventListener("keydown", (e) => {
 window.onload = () => {
     gameState.player = new Player("green");
 
-    // 1. Spawn player FIRST
-    if (!spawnPlayer(gameState.player)) {
-        console.error("[FATAL] Could not spawn player!");
-        return;
+    // Enemies
+    for (let i = 0; i < 3; i++) {
+        entityLayer.push(new Enemy(`Goblin_${i + 1}`, 30, 10, 5, "red"));
     }
 
-    // 2. Define and spawn FIXED position entities
-    const fixedEntities = [
-        // Items
-        { entity: new Key("gold_key", "gold", 1, 14), row: 1, col: 14 },
-        { entity: new Key("silver_key", "silver", 4, 9), row: 4, col: 9 },
-        { entity: new Potion("Health Potion", 30, 6, 4), row: 6, col: 4 },
-        { entity: new Gold(50, 2, 8), row: 2, col: 8 },
+    // BOSS
+    entityLayer.push(new Enemy("BOSS", 60, 20, 10, "purple"))
 
-        // Structures
-        { entity: new Door(5, 12, "gold_key"), row: 5, col: 12 },
-        { entity: new Door(3, 12, "silver_key"), row: 3, col: 12 },
-        { entity: new Chest(3, 6, [new Gold(100), new Potion("Health Potion", 50, -1, -1)]), row: 3, col: 6 },
-    ];
+    // Items
+    entityLayer.push(new Key("gold_key", "gold", 1, 14));
+    entityLayer.push(new Key("silver_key", "silver", 4, 9));
+    entityLayer.push(new Potion("Health Potion", 30, 6, 4));
+    entityLayer.push(new Gold(50, 2, 8));
 
-    for (let config of fixedEntities) {
-        if (spawnEntity(config.entity, config.row, config.col)) {
-            entityLayer.push(config.entity);
-        } else {
-            console.warn(`[SPAWN] Failed to spawn at (${config.row}, ${config.col})`);
-        }
-    }
+    // Structures
+    entityLayer.push(new Door(5, 12, "gold_key"));
+    entityLayer.push(new Door(3, 12, "silver_key"));
+    entityLayer.push(new Chest(3, 6, [new Gold(100), new Potion("Health Potion", 50, -1, -1)]));
 
-    // 3. Define and spawn RANDOM position enemies
-    const randomEnemies = [
-        new Enemy("Goblin_1", 30, 10, 5, "red"),
-        new Enemy("Goblin_2", 30, 10, 5, "red"),
-        new Enemy("Goblin_3", 30, 10, 5, "red"),
-        new Enemy("BOSS", 60, 20, 10, "purple"),
-    ];
+    let enemyCount = 0;
+    let itemCount = 0;
+    let structureCount = 0;
 
-    for (let enemy of randomEnemies) {
-        if (spawnEntityRandom(enemy, gameState.player)) {
-            entityLayer.push(enemy);
-        } else {
-            console.warn(`[SPAWN] Failed to spawn ${enemy.name} randomly`);
-        }
-    }
-
-    // 4. Stats logging
-    let stats = { enemies: 0, items: 0, structures: 0 };
     for (let e of entityLayer) {
-        if (e instanceof Enemy) stats.enemies++;
-        else if (e instanceof Item) stats.items++;
-        else if (e instanceof Structure) stats.structures++;
+        if (e instanceof Enemy) enemyCount++;
+        if (e instanceof Item) itemCount++;
+        if (e instanceof Structure) structureCount++;
     }
 
-    console.log(`[SPAWN] Loaded ${entityLayer.length} entities:`);
-    console.log(`  - ${stats.enemies} enemies`);
-    console.log(`  - ${stats.items} items`);
-    console.log(`  - ${stats.structures} structures`);
+    console.log("[Debug]: Enemy count:", enemyCount);
+    console.log("[Debug]: Item count:", itemCount);
+    console.log("[Debug]: Structure count:", structureCount);
+
+    // Spawn player
+    if (gameState.player) spawnPlayer(gameState.player);
+
+    // Spawn enemies randomly
+    for (let e of entityLayer) {
+        if (e instanceof Enemy) spawnEntityRandom(e, gameState.player);
+    }
 
     // ============ GAME LOOP ============
     function gameLoop() {
         clearCanvas();
 
+        // Game Over check
         if (gameState.gameOver) {
             drawGameOverScreen();
             return;
         }
 
+        // Victory check
         if (gameState.playerWon) {
             drawVictoryScreen();
             return;
@@ -567,16 +538,19 @@ window.onload = () => {
             drawGrid();
         }
 
+        // Entities renderelése típus szerint
         for (let e of entityLayer) {
+            // Structures mindig látszanak (ajtók, ládák)
             if (e instanceof Structure) {
                 drawEntity(e);
-            } else if (gameState.player != null && hasLineOfSight(e, gameState.player)) {
-                drawEntity(e);
-            } else if (gameState.player != null && gameState.inDebugMode) {
+            }
+            // Többi csak ha a játékos látja
+            else if (gameState.player != null && hasLineOfSight(e, gameState.player)) {
                 drawEntity(e);
             }
         }
 
+        // Játékos mindig felül
         if (gameState.player) {
             drawEntity(gameState.player);
         }
