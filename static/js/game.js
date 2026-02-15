@@ -538,6 +538,7 @@ window.onload = () => {
             drawGrid();
         }
 
+<<<<<<< HEAD
         // Entities renderelése típus szerint
         for (let e of entityLayer) {
             // Structures mindig látszanak (ajtók, ládák)
@@ -549,6 +550,9 @@ window.onload = () => {
                 drawEntity(e);
             }
         }
+=======
+        drawEntityLayer(entityLayer)
+>>>>>>> parent of bd65db6 (Refactors entity spawning for clarity and reliability)
 
         // Játékos mindig felül
         if (gameState.player) {
