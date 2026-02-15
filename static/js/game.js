@@ -48,9 +48,11 @@ let tileSize = Math.min(tileWidth, tileHeight)
 
 // ============ GAME STATE ============
 let gameState = {
+    animationId: null,
     inDebugMode: true,  // Default ON during development
-    player: null,
+    isPaused: false,
     inCombat: false,
+    player: null,
     currentEnemy: null,
     gameOver: false,
     playerWon: false,
@@ -196,6 +198,13 @@ function spawnEntityRandom(entity, minDistanceFrom = null) {
     return false
 }
 
+function togglePause() {
+    gameState.isPaused = !gameState.isPaused;
+    if (!gameState.isPaused && animationId === null) {
+        gameLoop(); // Újraindítás pause után
+    }
+}
+
 // ============ DRAW FUNCTIONS ============
 function clearCanvas() {
     ctx.fillStyle = BG_COLOR
@@ -272,7 +281,26 @@ function drawGrid() {
     }
 }
 
-function drawCombatScene(player, enemy) {
+function drawEntity(entity) {
+    if (entity.pos_row >= 0) {
+        let cx = entity.pos_col * tileSize + (tileSize - entity.size) / 2
+        let cy = entity.pos_row * tileSize + (tileSize - entity.size) / 2
+        drawRect(cx, cy, entity.size, entity.size, entity.color)
+        if (gameState.inDebugMode) {
+            drawText(`${entity.pos_row}:${entity.pos_col}`, cx + entity.size / 2, cy + entity.size / 2, "16px", "white", "center")
+        }
+    }
+}
+
+function drawEntityLayer(entityList) {
+    for (let entity of entityList) {
+        if (hasLineOfSight(entity, gameState.player)) {
+            drawEntity(entity);
+        }
+    }
+}
+
+function drawCombatScreen(player, enemy) {
     let swScaled = width * 0.7;
     let shScaled = height * 0.7;
     let cx = (width - swScaled) / 2;
@@ -318,23 +346,13 @@ function drawCombatScene(player, enemy) {
     drawText(gameState.combatLog, cx + swScaled / 2, cy + shScaled - 40, "italic 16px", "gold");
 }
 
-function drawEntity(entity) {
-    if (entity.pos_row >= 0) {
-        let cx = entity.pos_col * tileSize + (tileSize - entity.size) / 2
-        let cy = entity.pos_row * tileSize + (tileSize - entity.size) / 2
-        drawRect(cx, cy, entity.size, entity.size, entity.color)
-        if (gameState.inDebugMode) {
-            drawText(`${entity.pos_row}:${entity.pos_col}`, cx + entity.size / 2, cy + entity.size / 2, "16px", "white", "center")
-        }
-    }
-}
-
-function drawEntityLayer(entityList) {
-    for (let entity of entityList) {
-        if (hasLineOfSight(entity, gameState.player)) {
-            drawEntity(entity);
-        }
-    }
+function drawPauseScreen() {
+    let size = { w: 400, h: 200 }
+    let cx = width / 2 - size.w / 2
+    let cy = height / 2 - size.h / 2
+    drawRect(cx, cy, size.w, size.h, "#101010")
+    drawFrame(cx, cy, size.w, size.h, 10, "yellow", 2)
+    drawText("PAUSED", width / 2, height / 2, "bold 32px", "yellow");
 }
 
 // ============ UI & SYSTEM ============
@@ -420,10 +438,6 @@ function drawHUD() {
     ctx.fillRect(currentX + iconSize - 12, padding + 10, 8, iconSize - 26)
     ctx.fillStyle = "white"
     ctx.fillText(`Keys: ${keyCount}`, currentX + iconSize + 8, padding + 22)
-}
-
-function updateInfoPanel() {
-    // Deprecated - HUD is now drawn on canvas
 }
 
 function drawVictoryScreen() {
@@ -532,6 +546,9 @@ window.addEventListener("keydown", (e) => {
     if (e.key === "a") direction = "left";
     if (e.key === "d") direction = "right";
 
+    if (e.key === "p" || e.key === "Escape") {
+        togglePause();
+    }
     if (e.key === "~") gameState.inDebugMode = !gameState.inDebugMode;
 
     if (direction) {
@@ -610,18 +627,9 @@ window.onload = () => {
     }
 
     // ============ GAME LOOP ============
+
     function gameLoop() {
         clearCanvas();
-
-        if (gameState.gameOver) {
-            drawGameOverScreen();
-            return;
-        }
-
-        if (gameState.playerWon) {
-            drawVictoryScreen();
-            return;
-        }
 
         drawMap();
 
@@ -644,19 +652,31 @@ window.onload = () => {
         }
 
         if (gameState.inCombat) {
-            drawCombatScene(gameState.player, gameState.currentEnemy);
+            drawCombatScreen(gameState.player, gameState.currentEnemy);
         }
 
         if (gameState.showInfo) {
             drawInfoScreen();
         }
 
-        // Draw HUD on top of everything
-        if (gameState.player) {
-            drawHUD();
+        if (gameState.isPaused) {
+            drawPauseScreen()
+            animationId = requestAnimationFrame(gameLoop);
+            return;
         }
 
-        requestAnimationFrame(gameLoop);
+        if (gameState.gameOver) {
+            drawGameOverScreen();
+            cancelAnimationFrame(animationId); // MEGÁLLÍTJA a loop-ot
+            return;
+        } else if (gameState.playerWon) {
+            drawVictoryScreen()
+            cancelAnimationFrame(animationId); // MEGÁLLÍTJA a loop-ot
+            return;
+        }
+
+        animationId = requestAnimationFrame(gameLoop); // Tárold az ID-t
     }
+
     gameLoop();
 }
