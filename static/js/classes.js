@@ -68,10 +68,16 @@ class Player extends Actor {
 
             // Door collision -> nyitás vagy blokkolás
             if (collision instanceof Door) {
-                if (collision.canOpen(this)) {
+                if (collision.isOpen) {
+                    // Door already open, just pass through
+                    // No message needed
+                } else if (collision.canOpen(this)) {
                     collision.open();
-                    showInfoMessage(`Door opened with ${collision.requiredKey}`);
-                    // Folytatja a mozgást
+                    if (collision.requiredKey) {
+                        showInfoMessage(`Door opened with ${collision.requiredKey}`);
+                    } else {
+                        showInfoMessage(`Door opened`);
+                    }
                 } else {
                     showInfoMessage(`Locked! Need: ${collision.requiredKey}`);
                     return { moved: false, reason: "locked_door", entity: collision };
@@ -191,21 +197,31 @@ class Structure extends GameObject {
 }
 
 class Door extends Structure {
-    constructor(row, col, requiredKey, color = "brown") {
+    constructor(row, col, requiredKey = null, color = "brown") {
         super(row, col, color, 40);
-        this.requiredKey = requiredKey;
+        this.requiredKey = requiredKey;  // null = no key required
         this.isOpen = false;
     }
 
     canOpen(entity) {
         if (this.isOpen) return true;
+        
+        // No key required - always openable
+        if (this.requiredKey === null) return true;
+        
+        // Key required - check inventory
         return entity.inventory && entity.inventory.includes(this.requiredKey);
     }
 
     open() {
         this.isOpen = true;
         this.color = "#333333"; // Darker when open
-        console.log(`[DOOR] Opened with ${this.requiredKey}`);
+        
+        if (this.requiredKey) {
+            console.log(`[DOOR] Opened with ${this.requiredKey}`);
+        } else {
+            console.log(`[DOOR] Opened (no key required)`);
+        }
     }
 }
 

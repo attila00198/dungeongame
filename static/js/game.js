@@ -48,7 +48,7 @@ let tileSize = Math.min(tileWidth, tileHeight)
 
 // ============ GAME STATE ============
 let gameState = {
-    inDebugMode: true,
+    inDebugMode: true,  // Default ON during development
     player: null,
     inCombat: false,
     currentEnemy: null,
@@ -76,19 +76,19 @@ function isInViewRange(entity, player) {
 }
 
 function hasLineOfSight(entity, player) {
-    if (!isInViewRange(entity, player)) return false;
+    if (!isInViewRange(entity, player)) return false
 
-    let x1 = player.pos_col;
-    let y1 = player.pos_row;
-    let x2 = entity.pos_col;
-    let y2 = entity.pos_row;
+    let x1 = player.pos_col
+    let y1 = player.pos_row
+    let x2 = entity.pos_col
+    let y2 = entity.pos_row
 
-    let dx = x2 - x1;
-    let dy = y2 - y1;
+    let dx = x2 - x1
+    let dy = y2 - y1
 
-    let steps = Math.max(Math.abs(dx), Math.abs(dy)) * 2;
+    let steps = Math.max(Math.abs(dx), Math.abs(dy)) * 2
 
-    if (steps === 0) return true;
+    if (steps === 0) return true
 
     for (let i = 1; i <= steps; i++) {
         let t = i / steps;
@@ -171,10 +171,10 @@ function spawnPlayer(player) {
     return false
 }
 
-function spawnEntity(entity, row, col) {
+function spawnEntity(entity) {
+    row = entity.pos_row
+    col = entity.pos_col
     if (isValidPos(row, col) && getEntityAt(row, col, entityLayer) === null) {
-        entity.pos_row = row
-        entity.pos_col = col
         console.log(`[SPAWN] Entity spawned at (${row}, ${col})`)
         return true
     }
@@ -338,13 +338,92 @@ function drawEntityLayer(entityList) {
 }
 
 // ============ UI & SYSTEM ============
+function drawHUD() {
+    const hudHeight = 50
+    const padding = 15
+    const iconSize = 32
+    const spacing = 20
+
+    // HUD background
+    ctx.fillStyle = "rgba(16, 16, 16, 0.85)"
+    ctx.fillRect(0, 0, width, hudHeight)
+
+    // Bottom border line
+    ctx.strokeStyle = "#444"
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.moveTo(0, hudHeight)
+    ctx.lineTo(width, hudHeight)
+    ctx.stroke()
+
+    let currentX = padding
+
+    // === PLAYER STATS ===
+    // HP
+    ctx.fillStyle = "#ff4444"
+    ctx.fillRect(currentX, padding + 8, iconSize, iconSize - 16)
+    ctx.fillStyle = "white"
+    ctx.font = "bold 14px Courier New"
+    ctx.textAlign = "left"
+    ctx.fillText(`${gameState.player.health}/100`, currentX + iconSize + 8, padding + 22)
+
+    currentX += iconSize + 70
+
+    // ATK
+    ctx.fillStyle = "#ff8844"
+    ctx.beginPath()
+    ctx.moveTo(currentX + iconSize / 2, padding + 4)
+    ctx.lineTo(currentX + iconSize - 4, padding + iconSize - 4)
+    ctx.lineTo(currentX + 4, padding + iconSize - 4)
+    ctx.closePath()
+    ctx.fill()
+    ctx.fillStyle = "white"
+    ctx.fillText(`${gameState.player.atk}`, currentX + iconSize + 8, padding + 22)
+
+    currentX += iconSize + 50
+
+    // DEF
+    ctx.fillStyle = "#4488ff"
+    ctx.beginPath()
+    ctx.arc(currentX + iconSize / 2, padding + iconSize / 2, iconSize / 2 - 4, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.fillStyle = "white"
+    ctx.fillText(`${gameState.player.def}`, currentX + iconSize + 8, padding + 22)
+
+    // === DIVIDER ===
+    currentX += iconSize + 70
+    ctx.strokeStyle = "#444"
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.moveTo(currentX, padding)
+    ctx.lineTo(currentX, hudHeight - padding)
+    ctx.stroke()
+
+    currentX += spacing
+
+    // === ENEMIES REMAINING ===
+    const enemiesLeft = entityLayer.filter(e => e instanceof Enemy).length
+    ctx.fillStyle = "#ff4444"
+    ctx.fillRect(currentX, padding + 4, iconSize - 8, iconSize - 8)
+    ctx.fillStyle = "white"
+    ctx.font = "14px Courier New"
+    ctx.fillText(`Enemies: ${enemiesLeft}`, currentX + iconSize + 8, padding + 22)
+
+    currentX += iconSize + 130
+
+    // === KEYS ===
+    const keyCount = gameState.player.inventory.filter(item =>
+        item.includes("key") || item.includes("Key")
+    ).length
+    ctx.fillStyle = "#ffdd44"
+    ctx.fillRect(currentX + 4, padding + 4, iconSize - 16, iconSize - 16)
+    ctx.fillRect(currentX + iconSize - 12, padding + 10, 8, iconSize - 26)
+    ctx.fillStyle = "white"
+    ctx.fillText(`Keys: ${keyCount}`, currentX + iconSize + 8, padding + 22)
+}
+
 function updateInfoPanel() {
-    if (gameState.player != null) {
-        getById("pPos").textContent = `Position: (${gameState.player.pos_row}x${gameState.player.pos_col})`
-        getById("pHp").textContent = `Health: ${gameState.player.health}`
-        getById("pGold").textContent = `Gold: ${gameState.player.gold}`
-        getById("pInventory").textContent = `Inventory: ${gameState.player.inventory.join(", ")}`
-    }
+    // Deprecated - HUD is now drawn on canvas
 }
 
 function drawVictoryScreen() {
@@ -479,22 +558,23 @@ window.onload = () => {
     // 2. Define and spawn FIXED position entities
     const fixedEntities = [
         // Items
-        { entity: new Key("gold_key", "gold", 1, 14), row: 1, col: 14 },
-        { entity: new Key("silver_key", "silver", 4, 9), row: 4, col: 9 },
-        { entity: new Potion("Health Potion", 30, 6, 4), row: 6, col: 4 },
-        { entity: new Gold(50, 2, 8), row: 2, col: 8 },
+        new Key("gold_key", "gold", 1, 14),
+        new Key("silver_key", "silver", 4, 9),
+        new Potion("Health Potion", 30, 6, 4),
+        new Gold(50, 2, 8),
 
         // Structures
-        { entity: new Door(5, 12, "gold_key"), row: 5, col: 12 },
-        { entity: new Door(3, 12, "silver_key"), row: 3, col: 12 },
-        { entity: new Chest(3, 6, [new Gold(100), new Potion("Health Potion", 50, -1, -1)]), row: 3, col: 6 },
-    ];
+        new Door(5, 12, "gold_key"),      // Requires gold_key
+        new Door(3, 12, "silver_key"),    // Requires silver_key
+        new Door(3, 8, null, "gray"),    // No key required (gray color)
+        new Chest(3, 6, [new Gold(100), new Potion("Health Potion", 50, -1, -1)]),
+    ]
 
-    for (let config of fixedEntities) {
-        if (spawnEntity(config.entity, config.row, config.col)) {
-            entityLayer.push(config.entity);
+    for (let entity of fixedEntities) {
+        if (spawnEntity(entity)) {
+            entityLayer.push(entity)
         } else {
-            console.warn(`[SPAWN] Failed to spawn at (${config.row}, ${config.col})`);
+            console.warn(`[SPAWN] Failed to spawn at (${entity.pos_row}, ${entity.pos_col})`);
         }
     }
 
@@ -515,17 +595,19 @@ window.onload = () => {
     }
 
     // 4. Stats logging
-    let stats = { enemies: 0, items: 0, structures: 0 };
-    for (let e of entityLayer) {
-        if (e instanceof Enemy) stats.enemies++;
-        else if (e instanceof Item) stats.items++;
-        else if (e instanceof Structure) stats.structures++;
-    }
+    if (gameState.inDebugMode) {
+        let stats = { enemies: 0, items: 0, structures: 0 };
+        for (let e of entityLayer) {
+            if (e instanceof Enemy) stats.enemies++;
+            else if (e instanceof Item) stats.items++;
+            else if (e instanceof Structure) stats.structures++;
+        }
 
-    console.log(`[SPAWN] Loaded ${entityLayer.length} entities:`);
-    console.log(`  - ${stats.enemies} enemies`);
-    console.log(`  - ${stats.items} items`);
-    console.log(`  - ${stats.structures} structures`);
+        console.log(`[SPAWN] Loaded ${entityLayer.length} entities:`);
+        console.log(`  - ${stats.enemies} enemies`);
+        console.log(`  - ${stats.items} items`);
+        console.log(`  - ${stats.structures} structures`);
+    }
 
     // ============ GAME LOOP ============
     function gameLoop() {
@@ -569,7 +651,11 @@ window.onload = () => {
             drawInfoScreen();
         }
 
-        updateInfoPanel();
+        // Draw HUD on top of everything
+        if (gameState.player) {
+            drawHUD();
+        }
+
         requestAnimationFrame(gameLoop);
     }
     gameLoop();
