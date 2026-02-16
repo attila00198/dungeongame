@@ -700,16 +700,21 @@ window.onload = () => {
 
     // ============ GAME LOOP ============
 
-    function count(t) {
-        console.log(t)
-    }
-
-    let prevTimeSamp = 0
-    let dt = 0
+    let lastTime = performance.now()
+    let frameCount = 0
+    let fps = 0
     function gameLoop(timeStamp) {
+        frameCount++;
+        const dt = timeStamp - lastTime;
+
+        if (dt >= 1000) {
+            fps = Math.round((frameCount / dt) * 1000);
+            //console.log(`FPS: ${fps}`);
+            frameCount = 0;
+            lastTime = timeStamp;
+        }
+
         clearCanvas();
-        dt = timeStamp - prevTimeSamp
-        prevTimeSamp = timeStamp
 
         if (gameState.inDebugMode) {
             drawGrid();
