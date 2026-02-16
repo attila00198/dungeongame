@@ -48,14 +48,18 @@ let tileSize = Math.min(tileWidth, tileHeight)
 
 // ============ GAME STATE ============
 let gameState = {
+    player: null,
     animationId: null,
     inDebugMode: true,  // Default ON during development
+
     isPaused: false,
-    inCombat: false,
-    player: null,
+    isInventoryOpen: false,
+
+    isInCombat: false,
     currentEnemy: null,
     gameOver: false,
     playerWon: false,
+
     showInfo: false,
     infoMessage: "",
     infoTimeout: null
@@ -198,11 +202,18 @@ function spawnEntityRandom(entity, minDistanceFrom = null) {
     return false
 }
 
-function togglePause() {
-    gameState.isPaused = !gameState.isPaused;
-    if (!gameState.isPaused && animationId === null) {
-        gameLoop(); // Újraindítás pause után
+function showInfoMessage(message, duration = 2000) {
+    gameState.showInfo = true;
+    gameState.infoMessage = message;
+
+    if (gameState.infoTimeout) {
+        clearTimeout(gameState.infoTimeout);
     }
+
+    gameState.infoTimeout = setTimeout(() => {
+        gameState.showInfo = false;
+        gameState.infoMessage = "";
+    }, duration);
 }
 
 // ============ DRAW FUNCTIONS ============
@@ -346,6 +357,57 @@ function drawCombatScreen(player, enemy) {
     drawText(gameState.combatLog, cx + swScaled / 2, cy + shScaled - 40, "italic 16px", "gold");
 }
 
+function drawInventory() {
+    let swScaled = width * 0.4;
+    let shScaled = height * 0.6;
+    let cx = (width - swScaled) / 2;
+    let cy = (height - shScaled) / 2;
+
+    // Háttér panel
+    drawRect(cx, cy, swScaled, shScaled, "#1a1a1a");
+    drawFrame(cx, cy, swScaled, shScaled, 15, "gold", 3);
+
+    // Cím
+    drawText("INVENTORY", cx + swScaled / 2, cy + 40, "bold 24px", "gold");
+
+    // Vonal a cím alatt
+    ctx.strokeStyle = "#444";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(cx + 30, cy + 55);
+    ctx.lineTo(cx + swScaled - 30, cy + 55);
+    ctx.stroke();
+
+    // === ARANY ===
+    let startY = cy + 85;
+    drawText(`Gold: ${gameState.player.gold}`, cx + 30, startY, "18px", "#ffd700", "left");
+
+    // === KULCSOK ===
+    startY += 40;
+    drawText("Keys:", cx + 30, startY, "bold 18px", "white", "left");
+
+    if (gameState.player.inventory.length === 0) {
+        drawText("(none)", cx + 50, startY + 30, "16px", "#888", "left");
+    } else {
+        let keyY = startY + 30;
+        for (let item of gameState.player.inventory) {
+            // Kulcs ikon (kis négyzet)
+            let iconColor = "magenta"; // Default szín
+            if (item.includes("Gold")) iconColor = "gold";
+            if (item.includes("Silver")) iconColor = "silver";
+            if (item.includes("Clue")) iconColor = "cyan";
+            if (item.includes("Red")) iconColor = "red";
+
+            drawRect(cx + 50, keyY - 12, 16, 16, iconColor);
+            drawText(item, cx + 75, keyY, "16px", "white", "left");
+            keyY += 30;
+        }
+    }
+
+    // === BEZÁRÁS INFO ===
+    drawText("Press [I] to close", cx + swScaled / 2, cy + shScaled - 25, "14px", "#888");
+}
+
 function drawPauseScreen() {
     let size = { w: 400, h: 200 }
     let cx = width / 2 - size.w / 2
@@ -464,20 +526,6 @@ function drawGameOverScreen() {
     drawText("You have been defeated...", cx + swScaled / 2, cy + shScaled / 2 + 20, "18px", "white");
 }
 
-function showInfoMessage(message, duration = 2000) {
-    gameState.showInfo = true;
-    gameState.infoMessage = message;
-
-    if (gameState.infoTimeout) {
-        clearTimeout(gameState.infoTimeout);
-    }
-
-    gameState.infoTimeout = setTimeout(() => {
-        gameState.showInfo = false;
-        gameState.infoMessage = "";
-    }, duration);
-}
-
 function drawInfoScreen() {
     let swScaled = width * 0.6;
     let shScaled = height * 0.15;
@@ -491,7 +539,7 @@ function drawInfoScreen() {
 
 // ============ EVENT HANDLING ============
 function handleCombatAction() {
-    if (!gameState.inCombat || gameState.combatTurn !== "player") return;
+    if (!gameState.isInCombat || gameState.combatTurn !== "player") return;
 
     let damageDone = gameState.currentEnemy.takeDamage(gameState.player.atk);
     gameState.combatLog = `You hit ${gameState.currentEnemy.name} for ${damageDone} damage!`;
@@ -507,7 +555,7 @@ function handleCombatAction() {
                     entityLayer.splice(index, 1);
                     console.log(`[COMBAT] Removed ${gameState.currentEnemy.name} from entityLayer`);
                 }
-                gameState.inCombat = false;
+                gameState.isInCombat = false;
                 gameState.currentEnemy = null;
             }, 2000);
             return;
@@ -529,11 +577,37 @@ function handleCombatAction() {
     }, 2000);
 }
 
+function toggleInventory() {
+    gameState.isInventoryOpen = !gameState.isInventoryOpen;
+    console.log("Inventory:", gameState.isInventoryOpen);
+}
+
+function togglePause() {
+    gameState.isPaused = !gameState.isPaused;
+    console.log("Paused:", gameState.isPaused);
+    if (!gameState.isPaused && gameState.animationId === null) {
+        gameLoop();
+    }
+}
+
 // ============ INPUT HANDLING ============
 window.addEventListener("keydown", (e) => {
     if (e.repeat) return;
 
-    if (gameState.inCombat) {
+    // Allow toggling inventory and pause even when game is frozen
+    if (e.key === "i") {
+        toggleInventory();
+        return;
+    }
+    if (gameState.isInventoryOpen) return
+
+    if (e.key === "p" || e.key === "Escape") {
+        togglePause();
+        return;
+    }
+    if (gameState.isPaused) return
+
+    if (gameState.isInCombat) {
         if (e.key === " ") {
             handleCombatAction();
         }
@@ -546,15 +620,12 @@ window.addEventListener("keydown", (e) => {
     if (e.key === "a") direction = "left";
     if (e.key === "d") direction = "right";
 
-    if (e.key === "p" || e.key === "Escape") {
-        togglePause();
-    }
     if (e.key === "~") gameState.inDebugMode = !gameState.inDebugMode;
 
     if (direction) {
         let result = gameState.player.move(direction, gameState);
         if (result.reason === "collision" && result.entity instanceof Enemy) {
-            gameState.inCombat = true;
+            gameState.isInCombat = true;
             gameState.currentEnemy = result.entity;
             gameState.combatTurn = "player";
             gameState.combatLog = `Engaged ${result.entity.name}! Press SPACE!`;
@@ -575,14 +646,14 @@ window.onload = () => {
     // 2. Define and spawn FIXED position entities
     const fixedEntities = [
         // Items
-        new Key("gold_key", "gold", 1, 14),
-        new Key("silver_key", "silver", 4, 9),
+        new Key("Golden Key", "gold", 1, 14),
+        new Key("Silver Key", "silver", 4, 9),
         new Potion("Health Potion", 30, 6, 4),
         new Gold(50, 2, 8),
 
         // Structures
-        new Door(5, 12, "gold_key"),      // Requires gold_key
-        new Door(3, 12, "silver_key"),    // Requires silver_key
+        new Door(5, 12, "Golden Key"),      // Requires gold_key
+        new Door(3, 12, "Silver Key"),    // Requires silver_key
         new Door(3, 8, null, "gray"),    // No key required (gray color)
         new Chest(3, 6, [new Gold(100), new Potion("Health Potion", 50, -1, -1)]),
     ]
@@ -597,11 +668,12 @@ window.onload = () => {
 
     // 3. Define and spawn RANDOM position enemies
     const randomEnemies = [
-        new Enemy("Goblin_1", 30, 10, 5, "red"),
-        new Enemy("Goblin_2", 30, 10, 5, "red"),
-        new Enemy("Goblin_3", 30, 10, 5, "red"),
-        new Enemy("BOSS", 60, 20, 10, "purple"),
+        new Enemy("BOSS", 60, 20, 10, "purple")
     ];
+
+    for (let i = 0; i < 3; ++i) {
+        randomEnemies.push(new Enemy(`Goblin ${i + 1}`, 30, 10, 5, "red"))
+    }
 
     for (let enemy of randomEnemies) {
         if (spawnEntityRandom(enemy, gameState.player)) {
@@ -628,14 +700,22 @@ window.onload = () => {
 
     // ============ GAME LOOP ============
 
-    function gameLoop() {
-        clearCanvas();
+    function count(t) {
+        console.log(t)
+    }
 
-        drawMap();
+    let prevTimeSamp = 0
+    let dt = 0
+    function gameLoop(timeStamp) {
+        clearCanvas();
+        dt = timeStamp - prevTimeSamp
+        prevTimeSamp = timeStamp
 
         if (gameState.inDebugMode) {
             drawGrid();
         }
+
+        drawMap();
 
         for (let e of entityLayer) {
             if (e instanceof Structure) {
@@ -651,31 +731,55 @@ window.onload = () => {
             drawEntity(gameState.player);
         }
 
-        if (gameState.inCombat) {
+        drawHUD()
+
+        if (gameState.gameOver) {
+            drawGameOverScreen();
+            if (gameState.animationId) cancelAnimationFrame(gameState.animationId);
+            gameState.animationId = null;
+            return;
+        } else if (gameState.playerWon) {
+            drawVictoryScreen()
+            if (gameState.animationId) cancelAnimationFrame(gameState.animationId);
+            gameState.animationId = null;
+            return;
+        }
+
+        if (gameState.isInventoryOpen) {
+            drawInventory()
+            gameState.animationId = requestAnimationFrame(gameLoop);
+            return
+        }
+
+        if (gameState.isPaused) {
+            drawPauseScreen()
+            gameState.animationId = requestAnimationFrame(gameLoop);
+            return;
+        }
+
+        if (gameState.isInCombat) {
             drawCombatScreen(gameState.player, gameState.currentEnemy);
+            gameState.animationId = requestAnimationFrame(gameLoop);
+            return
+        }
+
+        if (gameState.gameOver) {
+            drawGameOverScreen();
+            if (gameState.animationId) cancelAnimationFrame(gameState.animationId);
+            gameState.animationId = null;
+            return;
+        } else if (gameState.playerWon) {
+            drawVictoryScreen()
+            if (gameState.animationId) cancelAnimationFrame(gameState.animationId);
+            gameState.animationId = null;
+            return;
         }
 
         if (gameState.showInfo) {
             drawInfoScreen();
         }
 
-        if (gameState.isPaused) {
-            drawPauseScreen()
-            animationId = requestAnimationFrame(gameLoop);
-            return;
-        }
-
-        if (gameState.gameOver) {
-            drawGameOverScreen();
-            cancelAnimationFrame(animationId); // MEGÁLLÍTJA a loop-ot
-            return;
-        } else if (gameState.playerWon) {
-            drawVictoryScreen()
-            cancelAnimationFrame(animationId); // MEGÁLLÍTJA a loop-ot
-            return;
-        }
-
-        animationId = requestAnimationFrame(gameLoop); // Tárold az ID-t
+        gameState.animationId = requestAnimationFrame(gameLoop); // Tárold az ID-t
     }
 
     gameLoop();
