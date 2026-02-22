@@ -133,6 +133,33 @@ class Enemy extends Actor {
         super(-1, -1, color, 40, health, atk, def);
         this.name = name;
     }
+
+    doPatrol(path = []) {
+        // Egyszerű patrol logika: végigmegy a path pontjain, majd vissza
+        if (path.length === 0) return;
+
+        let target = path[0];
+        let dirRow = target.row - this.pos_row;
+        let dirCol = target.col - this.pos_col;
+
+        // Normalizálás egy lépésre
+        if (dirRow !== 0) dirRow = dirRow / Math.abs(dirRow);
+        if (dirCol !== 0) dirCol = dirCol / Math.abs(dirCol);
+
+        // Próbálj meg lépni ebbe az irányba
+        let newRow = this.pos_row + dirRow;
+        let newCol = this.pos_col + dirCol;
+
+        if (isValidPos(newRow, newCol) && !getEntityAt(newRow, newCol, entityLayer)) {
+            this.pos_row = newRow;
+            this.pos_col = newCol;
+        }
+
+        // Ha elértük a targetet, menjünk a következőre
+        if (this.pos_row === target.row && this.pos_col === target.col) {
+            path.push(path.shift()); // Move current target to end of the list
+        }
+    }
 }
 
 // ============ ITEM (felvehető) ============
