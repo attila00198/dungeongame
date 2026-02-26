@@ -1,13 +1,15 @@
+// ==================================================
+//  Classes
+//=================================================
 // ============ BASE CLASS ============
 class GameObject {
     constructor(row, col, color, size) {
-        this.pos_row = row;
-        this.pos_col = col;
+        this.row = row;
+        this.col = col;
         this.color = color;
         this.size = size;
     }
 }
-
 // ============ ACTOR (mozog, él, harcol) ============
 class Actor extends GameObject {
     constructor(row, col, color, size, health, atk, def) {
@@ -17,73 +19,74 @@ class Actor extends GameObject {
         this.def = def;
         this.flashFrames = 0;
     }
-
     takeDamage(rawDamage) {
         let actualDamage = Math.max(1, rawDamage - this.def);
         this.health -= actualDamage;
         this.flashFrames = 30;
         return actualDamage;
     }
-
     isAlive() {
         return this.health > 0;
     }
 }
-
 class Player extends Actor {
     constructor(color) {
-        super(-1, -1, color, 40, 100, 20, 5);
+        super(-1, -1, color, 15, 100, 20, 5);
         this.gold = 0;
         this.inventory = [];
     }
-
     move(direction, gameState) {
-        let newRow = this.pos_row;
-        let newCol = this.pos_col;
-
+        let newRow = this.row;
+        let newCol = this.col;
         // Számold ki az új pozíciót
         switch (direction) {
-            case "up": newRow--; break;
-            case "down": newRow++; break;
-            case "left": newCol--; break;
-            case "right": newCol++; break;
+            case "up":
+                newRow--;
+                break;
+            case "down":
+                newRow++;
+                break;
+            case "left":
+                newCol--;
+                break;
+            case "right":
+                newCol++;
+                break;
             default:
                 console.error("[ERROR]: Unknown direction.");
                 return { moved: false, reason: "invalid_direction" };
         }
-
         // 1. TILE VALIDÁLÁS (fal, bounds)
-        if (!isValidPos(newRow, newCol)) {
+        if (!isValidPosition(newRow, newCol)) {
             return { moved: false, reason: "blocked_tile" };
         }
-
         // 2. ENTITY COLLISION
         let collision = getEntityAt(newRow, newCol, entityLayer);
-
         if (collision) {
             // Enemy collision -> harc
             if (collision instanceof Enemy) {
                 return { moved: false, reason: "collision", entity: collision };
             }
-
             // Door collision -> nyitás vagy blokkolás
             if (collision instanceof Door) {
                 if (collision.isOpen) {
                     // Door already open, just pass through
                     // No message needed
-                } else if (collision.canOpen(this)) {
+                }
+                else if (collision.canOpen(this)) {
                     collision.open();
                     if (collision.requiredKey) {
                         showInfoMessage(`Door opened with ${collision.requiredKey}`);
-                    } else {
+                    }
+                    else {
                         showInfoMessage(`Door opened`);
                     }
-                } else {
+                }
+                else {
                     showInfoMessage(`Locked! Need: ${collision.requiredKey}`);
                     return { moved: false, reason: "locked_door", entity: collision };
                 }
             }
-
             // Item collision -> felvétel
             if (collision instanceof Item) {
                 collision.onPickup(this);
@@ -94,107 +97,65 @@ class Player extends Actor {
                     console.log(`[PICKUP] Removed ${collision.name} from entityLayer`);
                 }
             }
-
             // Chest collision
             if (collision instanceof Chest) {
                 collision.open(this);
                 return { moved: false, reason: "chest" };
             }
-
             // Structure collision (egyéb blokkoló)
             if (collision instanceof Structure && !(collision instanceof Door)) {
                 return { moved: false, reason: "blocked_structure", entity: collision };
             }
         }
-
         // 3. Minden OK, mozoghat
-        this.pos_row = newRow;
-        this.pos_col = newCol;
-
+        this.row = newRow;
+        this.col = newCol;
         // 4. Exit check
-        let tileIndex = getTileTypeAt(gameState.player.pos_row, gameState.player.pos_col);
-        const TILE_NAME = Object.fromEntries(
-            Object.entries(TILE_TYPE).map(([k, v]) => [v, k])
-        );
+        let tileIndex = getTileTypeAt(gameState.player.row, gameState.player.col);
+        const TILE_NAME = Object.fromEntries(Object.entries(TILE_TYPE).map(([k, v]) => [v, k]));
         if (TILE_NAME[tileIndex] === "EXIT") {
             gameState.playerWon = true;
         }
-
         return { moved: true };
     }
-
     openInventory() {
         console.log(this.inventory);
     }
 }
-
 class Enemy extends Actor {
-    constructor(name, health, atk, def, color) {
-        super(-1, -1, color, 40, health, atk, def);
+    constructor(row, col, name, health, atk, def, color) {
+        super(row, col, color, 15, health, atk, def);
         this.name = name;
     }
-
-    doPatrol(path = []) {
-        // Egyszerű patrol logika: végigmegy a path pontjain, majd vissza
-        if (path.length === 0) return;
-
-        let target = path[0];
-        let dirRow = target.row - this.pos_row;
-        let dirCol = target.col - this.pos_col;
-
-        // Normalizálás egy lépésre
-        if (dirRow !== 0) dirRow = dirRow / Math.abs(dirRow);
-        if (dirCol !== 0) dirCol = dirCol / Math.abs(dirCol);
-
-        // Próbálj meg lépni ebbe az irányba
-        let newRow = this.pos_row + dirRow;
-        let newCol = this.pos_col + dirCol;
-
-        if (isValidPos(newRow, newCol) && !getEntityAt(newRow, newCol, entityLayer)) {
-            this.pos_row = newRow;
-            this.pos_col = newCol;
-        }
-
-        // Ha elértük a targetet, menjünk a következőre
-        if (this.pos_row === target.row && this.pos_col === target.col) {
-            path.push(path.shift()); // Move current target to end of the list
-        }
-    }
 }
-
 // ============ ITEM (felvehető) ============
 class Item extends GameObject {
     constructor(name, row, col, color, size = 20) {
         super(row, col, color, size);
         this.name = name;
     }
-
     onPickup(collector) {
         console.log(`${collector.constructor.name} picked up ${this.name}`);
     }
 }
-
 class Key extends Item {
-    constructor(name, color, row, col) {
-        super(name, row, col, color, 20);
+    constructor(row, col, name, color) {
+        super(name, row, col, color, 15);
     }
-
     onPickup(player) {
         player.inventory.push(this.name);
         showInfoMessage(`Picked up: ${this.name}`);
         console.log(`[PICKUP] ${player.constructor.name} collected ${this.name}`);
     }
 }
-
 class Potion extends Item {
-    constructor(name, healAmount, row, col) {
-        super(name, row, col, "red", 20);
+    constructor(row, col, name, healAmount) {
+        super(name, row, col, "blue", 15);
         this.healAmount = healAmount;
     }
-
     onPickup(player) {
-        if (player.health === 100) return
-
+        if (player.health === 100)
+            return;
         let oldHealth = player.health;
         player.health = Math.min(player.health + this.healAmount, 100);
         let actualHeal = player.health - oldHealth;
@@ -202,63 +163,55 @@ class Potion extends Item {
         console.log(`[PICKUP] Healed ${actualHeal} HP`);
     }
 }
-
 class Gold extends Item {
-    constructor(amount, row, col) {
-        super(`${amount} gold`, row, col, "gold", 15);
+    constructor(row = -1, col = -1, amount) {
+        super("Gold", row, col, "gold", 15);
         this.amount = amount;
     }
-
     onPickup(player) {
         player.gold += this.amount;
         showInfoMessage(`+${this.amount} gold`);
         console.log(`[PICKUP] +${this.amount} gold`);
     }
 }
-
 // ============ STRUCTURE (statikus, blokkoló) ============
 class Structure extends GameObject {
     constructor(row, col, color, size) {
         super(row, col, color, size);
     }
 }
-
 class Door extends Structure {
     constructor(row, col, requiredKey = null, color = "brown") {
-        super(row, col, color, 40);
-        this.requiredKey = requiredKey;  // null = no key required
+        super(row, col, color, 15);
+        this.requiredKey = requiredKey; // null = no key required
         this.isOpen = false;
     }
-
-    canOpen(entity) {
-        if (this.isOpen) return true;
-        
+    canOpen(player) {
+        if (this.isOpen)
+            return true;
         // No key required - always openable
-        if (this.requiredKey === null) return true;
-        
+        if (this.requiredKey === null)
+            return true;
         // Key required - check inventory
-        return entity.inventory && entity.inventory.includes(this.requiredKey);
+        return player.inventory && player.inventory.includes(this.requiredKey);
     }
-
     open() {
         this.isOpen = true;
         this.color = "#333333"; // Darker when open
-        
         if (this.requiredKey) {
             console.log(`[DOOR] Opened with ${this.requiredKey}`);
-        } else {
+        }
+        else {
             console.log(`[DOOR] Opened (no key required)`);
         }
     }
 }
-
 class Chest extends GameObject {
     constructor(row, col, contents = []) {
-        super(row, col, "orange", 35);
+        super(row, col, "orange", 15);
         this.contents = contents;
         this.isOpen = false;
     }
-
     open(player) {
         if (this.isOpen) {
             showInfoMessage("Chest already opened");
@@ -267,18 +220,19 @@ class Chest extends GameObject {
         }
         this.isOpen = true;
         this.color = "#664400";
-
         let itemNames = [];
         for (let item of this.contents) {
             if (item instanceof Gold) {
                 player.gold += item.amount;
                 itemNames.push(`${item.amount} gold`);
                 console.log(`[CHEST] Found ${item.amount} gold`);
-            } else if (item instanceof Key) {
+            }
+            else if (item instanceof Key) {
                 player.inventory.push(item.name);
                 itemNames.push(item.name);
                 console.log(`[CHEST] Found ${item.name}`);
-            } else if (item instanceof Potion) {
+            }
+            else if (item instanceof Potion) {
                 item.onPickup(player);
                 itemNames.push(item.name);
                 console.log(`[CHEST] Found ${item.name}`);

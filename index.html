@@ -1,27 +1,51 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dungeon</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=MedievalSharp&family=Cinzel:wght@400;700;900&family=Crimson+Text:ital,wght@0,400;1,400&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./static/css/menu.css" />
+  </head>
+  <body>
+    <canvas id="bgCanvas"></canvas>
 
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <div id="overlay"></div>
 
-    <link rel="stylesheet" href="static/css/style.css">
+    <main id="menu">
+      <div id="menuInner">
+        <div id="titleBlock">
+          <div id="titleTop">DUNGEON</div>
+          <div id="titleSub">CRAWLER</div>
+          <div id="titleRule"></div>
+        </div>
 
-    <title>Dungeon Game</title>
-</head>
+        <nav id="menuNav">
+          <a href="game.html" class="menuBtn" id="btnPlay">
+            <span class="btnIcon">⚔</span>
+            <span class="btnLabel">Play</span>
+            <span class="btnHint">Enter the dungeon</span>
+          </a>
+          <a href="editor.html" class="menuBtn" id="btnEditor">
+            <span class="btnIcon">✦</span>
+            <span class="btnLabel">Editor</span>
+            <span class="btnHint">Forge your own dungeon</span>
+          </a>
+        </nav>
 
-<body>
-    <div id="appContainer"></div>
+        <footer id="menuFooter">
+          <span
+            >WASD — Move &nbsp;|&nbsp; SPACE — Attack &nbsp;|&nbsp; I —
+            Inventory</span
+          >
+        </footer>
+      </div>
+    </main>
 
-    <!-- Core libraries -->
-    <script src="static/js/domino.js"></script>
-    
-    <!-- Game files -->
-    <script src="static/js/classes.js"></script>
-    
-    <!-- UI and Game initialization -->
-    <script src="static/js/ui.js"></script>
-    <script src="static/js/game.js"></script>
-</body>
-
+    <script src="static/js/menu.js"></script>
+  </body>
 </html>

@@ -38,12 +38,22 @@ function tag(name, ...children) {
         return this
     }
 
+    node.addClass = function (className) {
+        this.classList.add(className)
+        return this
+    }
+
+    node.removeClass = function (className) {
+        this.classList.remove(className)
+        return this
+    }
+
     node.toggleClass = function (className) {
         this.classList.toggle(className)
         return this
     }
 
-    node.setCss = function (style) {
+    node.setStyle = function (style) {
         // Accept either a css text string or an object map of CSS properties
         if (typeof style === 'string') {
             this.style.cssText = style
