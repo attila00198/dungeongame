@@ -716,11 +716,12 @@ window.onload = () => {
 
         clearCanvas();
 
+        
+        drawMap();
+        
         if (gameState.inDebugMode) {
             drawGrid();
         }
-
-        drawMap();
 
         for (let e of entityLayer) {
             if (e instanceof Structure) {

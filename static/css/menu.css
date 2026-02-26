@@ -1,0 +1,269 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --bg: #06080a;
+  --stone: #0e1014;
+  --ember: #c8420a;
+  --ember-dim: #7a2806;
+  --gold: #c9a84c;
+  --gold-dim: #7a6130;
+  --text: #b8b0a0;
+  --text-dim: #5a554e;
+  --text-hi: #ede8de;
+  --display: "Cinzel", serif;
+  --body: "Crimson Text", serif;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  cursor: default;
+}
+
+/* ===== ANIMATED BACKGROUND ===== */
+#bgCanvas {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  opacity: 0.6;
+}
+
+/* ===== VIGNETTE OVERLAY ===== */
+#overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  background:
+    radial-gradient(
+      ellipse at 50% 50%,
+      transparent 30%,
+      rgba(6, 8, 10, 0.85) 100%
+    ),
+    radial-gradient(
+      ellipse at 50% 0%,
+      rgba(200, 66, 10, 0.04) 0%,
+      transparent 60%
+    );
+  pointer-events: none;
+}
+
+/* ===== MENU LAYOUT ===== */
+#menu {
+  position: fixed;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#menuInner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 52px;
+  opacity: 0;
+  transform: translateY(16px);
+  animation: fadeUp 1.2s cubic-bezier(0.16, 1, 0.3, 1) 0.3s forwards;
+}
+
+@keyframes fadeUp {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ===== TITLE ===== */
+#titleBlock {
+  text-align: center;
+  position: relative;
+}
+
+#titleTop {
+  font-family: var(--display);
+  font-weight: 900;
+  font-size: clamp(56px, 8vw, 96px);
+  letter-spacing: 0.18em;
+  color: var(--text-hi);
+  line-height: 1;
+  text-shadow:
+    0 0 60px rgba(200, 66, 10, 0.3),
+    0 0 120px rgba(200, 66, 10, 0.15),
+    0 2px 4px rgba(0, 0, 0, 0.8);
+  animation: titleFlicker 8s ease-in-out infinite;
+}
+
+#titleSub {
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: clamp(14px, 2vw, 22px);
+  letter-spacing: 0.6em;
+  color: var(--ember);
+  margin-top: 4px;
+  text-transform: uppercase;
+  text-shadow: 0 0 30px rgba(200, 66, 10, 0.5);
+}
+
+#titleRule {
+  width: 160px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--gold-dim), transparent);
+  margin: 20px auto 0;
+}
+
+@keyframes titleFlicker {
+  0%,
+  95%,
+  100% {
+    opacity: 1;
+  }
+  96% {
+    opacity: 0.92;
+  }
+  97% {
+    opacity: 1;
+  }
+  98% {
+    opacity: 0.88;
+  }
+  99% {
+    opacity: 1;
+  }
+}
+
+/* ===== MENU BUTTONS ===== */
+#menuNav {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 340px;
+}
+
+.menuBtn {
+  display: grid;
+  grid-template-columns: 40px 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 16px;
+  align-items: center;
+  padding: 18px 24px;
+  text-decoration: none;
+  color: var(--text);
+  border: 1px solid #2a2520;
+  background: rgba(14, 16, 20, 0.7);
+  position: relative;
+  overflow: hidden;
+  transition:
+    border-color 0.25s,
+    color 0.25s;
+  backdrop-filter: blur(4px);
+}
+
+.menuBtn::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    rgba(200, 66, 10, 0.06) 0%,
+    transparent 100%
+  );
+  opacity: 0;
+  transition: opacity 0.25s;
+}
+
+.menuBtn::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--ember);
+  transform: scaleY(0);
+  transform-origin: bottom;
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.menuBtn:hover {
+  border-color: var(--ember-dim);
+  color: var(--text-hi);
+}
+
+.menuBtn:hover::before {
+  opacity: 1;
+}
+.menuBtn:hover::after {
+  transform: scaleY(1);
+}
+
+.menuBtn:hover .btnIcon {
+  color: var(--ember);
+  text-shadow: 0 0 20px rgba(200, 66, 10, 0.8);
+}
+
+.menuBtn:hover .btnLabel {
+  color: var(--text-hi);
+  letter-spacing: 0.18em;
+}
+
+.btnIcon {
+  grid-row: 1 / 3;
+  font-size: 22px;
+  color: var(--gold-dim);
+  text-align: center;
+  transition:
+    color 0.25s,
+    text-shadow 0.25s;
+  line-height: 1;
+  align-self: center;
+}
+
+.btnLabel {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text);
+  transition:
+    color 0.25s,
+    letter-spacing 0.25s;
+  line-height: 1;
+}
+
+.btnHint {
+  font-family: var(--body);
+  font-style: italic;
+  font-size: 13px;
+  color: var(--text-dim);
+  line-height: 1;
+  margin-top: 4px;
+  transition: color 0.25s;
+}
+
+.menuBtn:hover .btnHint {
+  color: #7a6a5a;
+}
+
+/* ===== FOOTER ===== */
+#menuFooter {
+  font-family: var(--body);
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+  text-align: center;
+  opacity: 0;
+  animation: fadeUp 1s ease 1.2s forwards;
+}
