@@ -1,6 +1,7 @@
 # Dungeon Game
 
-An HTML/JavaScript-based interactive dungeon exploration project.  The game runs entirely in the browser using static files and is under active development.
+An HTML/JavaScript-based interactive dungeon exploration project that runs entirely in the browser using only static files.
+Designed to be lightweight and easy to modify, the codebase includes a simple tile editor, game engine, and asset management, making it a great starting point for hobbyist developers and learners.
 
 ## Current State
 
@@ -39,6 +40,13 @@ dungeongame/
 
 Because the game uses local file loading, it should be served over HTTP.  You can use any simple static file server; for example:
 
+- Using PHP
+```sh
+# using Python 3
+php -S localhost:8000
+```
+
+- Usin python
 ```sh
 # using Python 3
 python -m http.server 8000
@@ -67,7 +75,9 @@ Pull requests and issues are welcome.  Ensure code is formatted consistently and
 
 ## License
 
-Specify your license here (e.g. MIT).
+This project is released under the [MIT License](LICENSE).
+
+A copy of the license is included in the `LICENSE` file at the root of the repository.  In short, you are free to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the software, provided the original copyright notice and this permission notice are included in all copies or substantial portions of the software.
 
 ## Contact
 

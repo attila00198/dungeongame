@@ -111,11 +111,8 @@ class Player extends Actor {
         this.row = newRow;
         this.col = newCol;
         // 4. Exit check
-        let tileIndex = getTileTypeAt(gameState.player.row, gameState.player.col);
-        const TILE_NAME = Object.fromEntries(Object.entries(TILE_TYPE).map(([k, v]) => [v, k]));
-        if (TILE_NAME[tileIndex] === "EXIT") {
-            gameState.playerWon = true;
-        }
+        const tile = TILE_BY_ID[getTileTypeAt(newRow, newCol)];
+        if (tile === TILE_T.EXIT) gameState.playerWon = true;
         return { moved: true };
     }
     openInventory() {
@@ -128,6 +125,7 @@ class Enemy extends Actor {
         this.name = name;
     }
 }
+
 // ============ ITEM (felvehető) ============
 class Item extends GameObject {
     constructor(name, row, col, color, size = 20) {
@@ -150,7 +148,7 @@ class Key extends Item {
 }
 class Potion extends Item {
     constructor(row, col, name, healAmount) {
-        super(name, row, col, "blue", 15);
+        super(name, row, col, "purple", 15);
         this.healAmount = healAmount;
     }
     onPickup(player) {

@@ -6,27 +6,20 @@ const factor = 60;
 const GRID_WIDTH = 16 * factor / TILE_SIZE;
 const GRID_HEIGHT = 9 * factor / TILE_SIZE;
 
-const TILE_TYPE = {
-    FLOOR: 0,
-    WALL: 1,
-    DOOR: 2,
-    WATER: 3,
-    START: 4,
-    END: 5
+const TILE_T = {
+    FLOOR: { id: 0, color: "#4e170d", isWalkable: true, hasEffect: false },
+    WALL: { id: 1, color: "#101010", isWalkable: false, hasEffect: false },
+    WATER: { id: 2, color: "#1a3a6a", isWalkable: true, hasEffect: true },
+    FIRE: { id: 3, color: "#8B4513", isWalkable: true, hasEffect: true },
+    START: { id: 4, color: "#8a7200", isWalkable: true, hasEffect: false },
+    EXIT: { id: 5, color: "#006a6a", isWalkable: true, hasEffect: false },
 };
 
-const TILE_COLOR = {
-    FLOOR_COLOR: "#4e170d",
-    WALL_COLOR: "#101010",
-    WATER_COLOR: "blue",
-    FIRE_COLOR: "orange",
-    SPOWN_COLOR: "gold",
-    EXIT_COLOR: "cyan",
-};
+const TILE_BY_ID = Object.fromEntries(
+    Object.values(TILE_T).map(t => [t.id, t])
+);
 
-const WALKABLE_TILES = [TILE_TYPE.FLOOR, TILE_TYPE.DOOR, TILE_TYPE.START, TILE_TYPE.END];
-
-const VIEW_DISTANCE = 5;
+const VIEW_DISTANCE = 8;
 
 // ==================================================
 //  State
@@ -49,7 +42,6 @@ let gameState = {
 };
 
 let entityLayer = [];
-let grid = createGrid(GRID_WIDTH, GRID_HEIGHT);
 
 // ==================================================
 //  Utility Functions
@@ -72,10 +64,9 @@ function showInfoMessage(message, duration = 2000) {
 }
 
 function isValidPosition(row, col) {
-    if (row < 0 || row >= grid.length || col < 0 || col >= grid[0].length) {
-        return false;
-    }
-    return WALKABLE_TILES.includes(grid[row][col]);
+    if (row < 0 || row >= grid.length || col < 0 || col >= grid[0].length) return false;
+    const tile = TILE_BY_ID[grid[row][col]];
+    return tile?.isWalkable ?? false;
 }
 
 function isInViewRange(entity, player) {
@@ -103,7 +94,10 @@ function hasLineOfSight(entity, player) {
         let checkCol = Math.round(currX);
         let checkRow = Math.round(currY);
         if (checkCol === x2 && checkRow === y2) return true;
-        if (grid[checkRow] && grid[checkRow][checkCol] === TILE_TYPE.WALL) return false;
+        const tile = TILE_BY_ID[grid[checkRow][checkCol]];
+        if (tile === TILE_T.WALL) return false;
+        const blocker = getEntityAt(checkRow, checkCol, entityLayer);
+        if (blocker instanceof Door && !blocker.isOpen) return false;
     }
     return true;
 }
@@ -134,29 +128,10 @@ function getTileTypeAt(row, col) {
 }
 
 // ==================================================
-//  Grid Functions
-//===================================================
-function createGrid(width, height) {
-    const grid = [];
-    for (let y = 0; y < height; ++y) {
-        let row = [];
-        for (let x = 0; x < width; ++x) {
-            if (x === 0 || x === width - 1 || y === 0 || y === height - 1) {
-                row.push(TILE_TYPE.WALL);
-                continue;
-            }
-            row.push(TILE_TYPE.FLOOR);
-        }
-        grid.push(row);
-    }
-    return grid;
-}
-
-// ==================================================
 //  Rendering Functions
 //===================================================
 function clearCanvas() {
-    ctx.fillStyle = TILE_COLOR.FLOOR_COLOR;
+    ctx.fillStyle = TILE_T.FLOOR.color;
     ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 }
 
@@ -191,17 +166,8 @@ function drawFrame(x, y, w, h, offset, color = "orange", thickness = 2) {
 function drawMap() {
     for (let row = 0; row < grid.length; row++) {
         for (let col = 0; col < grid[row].length; col++) {
-            if (grid[row][col] == TILE_TYPE.WALL) {
-                ctx.fillStyle = TILE_COLOR.WALL_COLOR;
-            } else if (grid[row][col] == TILE_TYPE.END) {
-                ctx.fillStyle = TILE_COLOR.EXIT_COLOR;
-            } else if (grid[row][col] == TILE_TYPE.START) {
-                ctx.fillStyle = TILE_COLOR.SPOWN_COLOR;
-            } else if (grid[row][col] == TILE_TYPE.WATER) {
-                ctx.fillStyle = TILE_COLOR.WATER_COLOR;
-            } else {
-                ctx.fillStyle = TILE_COLOR.FLOOR_COLOR;
-            }
+            const tile = TILE_BY_ID[grid[row][col]];
+            ctx.fillStyle = tile?.color ?? "#000";
             ctx.fillRect(col * TILE_SIZE, row * TILE_SIZE, TILE_SIZE, TILE_SIZE);
         }
     }
@@ -240,7 +206,12 @@ function drawEntityLayer(entityList) {
     for (let e of entityList) {
         if (e instanceof Structure) {
             drawEntity(e);
-        } else if (gameState.player != null && hasLineOfSight(e, gameState.player)) {
+        }
+    }
+
+    for (let e of entityList) {
+        if (e instanceof Structure) continue;
+        if (gameState.player != null && hasLineOfSight(e, gameState.player)) {
             drawEntity(e);
         } else if (gameState.player != null && gameState.inDebugMode) {
             drawEntity(e);
@@ -354,12 +325,14 @@ function drawCombatScreen(player, enemy) {
     drawRect(pX, pY, entitySize, entitySize, pColor);
 
     if (gameState.combatTurn === "player") {
-        drawText("▼", pX + entitySize / 2, pY - 60, "20px", "gold");
+        drawText("▼", pX + entitySize / 2, pY - 75, "20px", "gold");
     }
 
-    drawText(`HP: ${player.health}`,  pX, pY - 45, "14px", "white", "left", "Consolas");
-    drawText(`ATK: ${player.atk}`,    pX, pY - 30, "14px", "white", "left", "Consolas");
-    drawText(`DEF: ${player.def}`,    pX, pY - 15, "14px", "white", "left", "Consolas");
+    drawText(`HP: ${player.health}`, pX, pY - 45, "14px", "white", "left", "Consolas");
+    drawText(`ATK: ${player.atk}`, pX, pY - 30, "14px", "white", "left", "Consolas");
+    drawText(`DEF: ${player.def}`, pX, pY - 15, "14px", "white", "left", "Consolas");
+    drawText("Player", pX + entitySize / 2, pY - 60, "16px", "green", "center");
+
 
     const eX = cx + swScaled - 100 - entitySize;
     const eY = cy + shScaled / 2;
@@ -369,13 +342,13 @@ function drawCombatScreen(player, enemy) {
     drawRect(eX, eY, entitySize, entitySize, eColor);
 
     if (gameState.combatTurn === "enemy") {
-        drawText("▼", eX + entitySize / 2, eY - 60, "20px", "gold");
+        drawText("▼", eX + entitySize / 2, eY - 75, "20px", "gold");
     }
 
-    drawText(`HP: ${enemy.health}`,  eX + entitySize, eY - 45, "14px", "white", "right", "Consolas");
-    drawText(`ATK: ${enemy.atk}`,    eX + entitySize, eY - 30, "14px", "white", "right", "Consolas");
-    drawText(`DEF: ${enemy.def}`,    eX + entitySize, eY - 15, "14px", "white", "right", "Consolas");
-    drawText(enemy.name,             eX + entitySize / 2, eY - 60, "16px", "red", "center");
+    drawText(`HP: ${enemy.health}`, eX + entitySize, eY - 45, "14px", "white", "right", "Consolas");
+    drawText(`ATK: ${enemy.atk}`, eX + entitySize, eY - 30, "14px", "white", "right", "Consolas");
+    drawText(`DEF: ${enemy.def}`, eX + entitySize, eY - 15, "14px", "white", "right", "Consolas");
+    drawText(enemy.name, eX + entitySize / 2, eY - 60, "16px", "red", "center");
 
     drawText(gameState.combatLog, cx + swScaled / 2, cy + shScaled - 40, "italic 16px", "gold");
 }
@@ -409,9 +382,9 @@ function drawInventory() {
         let keyY = startY + 30;
         for (let item of gameState.player.inventory) {
             let iconColor = "magenta";
-            if (item.includes("Gold"))   iconColor = "gold";
+            if (item.includes("Gold")) iconColor = "gold";
             if (item.includes("Silver")) iconColor = "silver";
-            if (item.includes("Red"))    iconColor = "red";
+            if (item.includes("Red")) iconColor = "red";
             drawRect(cx + 50, keyY - 12, 16, 16, iconColor);
             drawText(item, cx + 75, keyY, "16px", "white", "left");
             keyY += 30;
@@ -469,7 +442,7 @@ function gameContainer() {
 function app() {
     return div(
         gameContainer()
-    ).setId("appContainer").setClass("container");
+    ).setId("appContainer").addClass("container");
 }
 
 // ==================================================
@@ -526,7 +499,7 @@ function togglePause() {
 function spawnPlayer(player) {
     for (let row = 0; row < grid.length; row++) {
         for (let col = 0; col < grid[row].length; col++) {
-            if (grid[row][col] === TILE_TYPE.START) {
+            if (grid[row][col] === TILE_T.START.id) {
                 player.row = row;
                 player.col = col;
                 return true;
@@ -572,10 +545,9 @@ appContainer.appendChild(app());
 const canvasWidth = 16 * factor;
 const canvasHeight = 9 * factor;
 
-const gameCanvas = document.getElementById("game");
-const ctx = gameCanvas.getContext("2d");
-gameCanvas.width = canvasWidth;
-gameCanvas.height = canvasHeight;
+const gameCanvas = getById("game");
+const ctx = gameCanvas.get2d();
+gameCanvas.setSize(canvasWidth, canvasHeight)
 
 // ==================================================
 //  Map Loading
@@ -621,12 +593,17 @@ function startGame() {
 
     log(1, `Player spawned at (${gameState.player.row}, ${gameState.player.col})`);
 
-    function gameLoop() {
+    function gameLoop(now) {
         clearCanvas();
         drawMap();
         if (gameState.inDebugMode) {
             drawGrid();
         }
+
+        if (!gameState.inDebugMode) {
+            tickEnemyAI(now);
+        }
+
         drawEntityLayer(entityLayer);
         if (gameState.player) {
             drawEntity(gameState.player);
@@ -661,7 +638,7 @@ function startGame() {
         requestAnimationFrame(gameLoop);
     }
 
-    gameLoop();
+    requestAnimationFrame(gameLoop);
 }
 
 function loadMap(filename) {
