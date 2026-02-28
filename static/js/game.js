@@ -1,6 +1,6 @@
 // ==================================================
 //  Constants
-//===================================================
+// ==================================================
 const TILE_SIZE = 20;
 const factor = 60;
 const GRID_WIDTH = 16 * factor / TILE_SIZE;
@@ -22,12 +22,15 @@ const TILE_BY_ID = Object.fromEntries(
 const VIEW_DISTANCE = 8;
 
 // ==================================================
-//  State
-//===================================================
+//  Global State
+// ==================================================
+let grid = [];
+let entityLayer = [];
+
 let gameState = {
     player: null,
     animationId: null,
-    inDebugMode: true,
+    inDebugMode: false,
     isPaused: false,
     isInventoryOpen: false,
     isInCombat: false,
@@ -41,11 +44,9 @@ let gameState = {
     infoTimeout: null
 };
 
-let entityLayer = [];
-
 // ==================================================
 //  Utility Functions
-//===================================================
+// ==================================================
 function log(level, message) {
     const levels = ["DEBUG", "INFO", "WARN", "ERROR"];
     console.log(`[${levels[level]}]: ${message}`);
@@ -54,9 +55,7 @@ function log(level, message) {
 function showInfoMessage(message, duration = 2000) {
     gameState.showInfo = true;
     gameState.infoMessage = message;
-    if (gameState.infoTimeout) {
-        clearTimeout(gameState.infoTimeout);
-    }
+    if (gameState.infoTimeout) clearTimeout(gameState.infoTimeout);
     gameState.infoTimeout = setTimeout(() => {
         gameState.showInfo = false;
         gameState.infoMessage = "";
@@ -72,27 +71,21 @@ function isValidPosition(row, col) {
 function isInViewRange(entity, player) {
     let dx = entity.col - player.col;
     let dy = entity.row - player.row;
-    let distance = Math.abs(dx) + Math.abs(dy);
-    return distance <= VIEW_DISTANCE;
+    return Math.abs(dx) + Math.abs(dy) <= VIEW_DISTANCE;
 }
 
 function hasLineOfSight(entity, player) {
     if (!isInViewRange(entity, player)) return false;
     if (!player) return;
-    let x1 = player.col;
-    let y1 = player.row;
-    let x2 = entity.col;
-    let y2 = entity.row;
-    let dx = x2 - x1;
-    let dy = y2 - y1;
+    let x1 = player.col, y1 = player.row;
+    let x2 = entity.col, y2 = entity.row;
+    let dx = x2 - x1, dy = y2 - y1;
     let steps = Math.max(Math.abs(dx), Math.abs(dy)) * 2;
     if (steps === 0) return true;
     for (let i = 1; i <= steps; i++) {
         let t = i / steps;
-        let currX = x1 + dx * t;
-        let currY = y1 + dy * t;
-        let checkCol = Math.round(currX);
-        let checkRow = Math.round(currY);
+        let checkCol = Math.round(x1 + dx * t);
+        let checkRow = Math.round(y1 + dy * t);
         if (checkCol === x2 && checkRow === y2) return true;
         const tile = TILE_BY_ID[grid[checkRow][checkCol]];
         if (tile === TILE_T.WALL) return false;
@@ -104,8 +97,7 @@ function hasLineOfSight(entity, player) {
 
 function getRandomWalkablePos(minDistanceFrom, minDist = 3) {
     let attempts = 0;
-    let maxAttempts = 1000;
-    while (attempts < maxAttempts) {
+    while (attempts < 1000) {
         let row = Math.floor(Math.random() * GRID_HEIGHT);
         let col = Math.floor(Math.random() * GRID_WIDTH);
         if (!isValidPosition(row, col)) { attempts++; continue; }
@@ -129,7 +121,7 @@ function getTileTypeAt(row, col) {
 
 // ==================================================
 //  Rendering Functions
-//===================================================
+// ==================================================
 function clearCanvas() {
     ctx.fillStyle = TILE_T.FLOOR.color;
     ctx.fillRect(0, 0, canvasWidth, canvasHeight);
@@ -150,10 +142,8 @@ function drawText(text, x, y, size = "16px", color = "white", align = "center", 
 function drawFrame(x, y, w, h, offset, color = "orange", thickness = 2) {
     ctx.strokeStyle = color;
     ctx.lineWidth = thickness;
-    let innerX = x + offset;
-    let innerY = y + offset;
-    let innerW = w - (offset * 2);
-    let innerH = h - (offset * 2);
+    let innerX = x + offset, innerY = y + offset;
+    let innerW = w - offset * 2, innerH = h - offset * 2;
     ctx.beginPath();
     ctx.moveTo(innerX, innerY);
     ctx.lineTo(innerX + innerW, innerY);
@@ -203,12 +193,11 @@ function drawEntity(entity) {
 }
 
 function drawEntityLayer(entityList) {
+    // Pass 1: structures (Door, Chest, stb.) — mindig alul
     for (let e of entityList) {
-        if (e instanceof Structure) {
-            drawEntity(e);
-        }
+        if (e instanceof Structure) drawEntity(e);
     }
-
+    // Pass 2: mozgó entitások — felül
     for (let e of entityList) {
         if (e instanceof Structure) continue;
         if (gameState.player != null && hasLineOfSight(e, gameState.player)) {
@@ -324,15 +313,11 @@ function drawCombatScreen(player, enemy) {
     if (player.flashFrames > 0) player.flashFrames--;
     drawRect(pX, pY, entitySize, entitySize, pColor);
 
-    if (gameState.combatTurn === "player") {
-        drawText("▼", pX + entitySize / 2, pY - 75, "20px", "gold");
-    }
-
+    if (gameState.combatTurn === "player") drawText("▼", pX + entitySize / 2, pY - 75, "20px", "gold");
     drawText(`HP: ${player.health}`, pX, pY - 45, "14px", "white", "left", "Consolas");
     drawText(`ATK: ${player.atk}`, pX, pY - 30, "14px", "white", "left", "Consolas");
     drawText(`DEF: ${player.def}`, pX, pY - 15, "14px", "white", "left", "Consolas");
     drawText("Player", pX + entitySize / 2, pY - 60, "16px", "green", "center");
-
 
     const eX = cx + swScaled - 100 - entitySize;
     const eY = cy + shScaled / 2;
@@ -341,15 +326,11 @@ function drawCombatScreen(player, enemy) {
     if (enemy.flashFrames > 0) enemy.flashFrames--;
     drawRect(eX, eY, entitySize, entitySize, eColor);
 
-    if (gameState.combatTurn === "enemy") {
-        drawText("▼", eX + entitySize / 2, eY - 75, "20px", "gold");
-    }
-
+    if (gameState.combatTurn === "enemy") drawText("▼", eX + entitySize / 2, eY - 75, "20px", "gold");
     drawText(`HP: ${enemy.health}`, eX + entitySize, eY - 45, "14px", "white", "right", "Consolas");
     drawText(`ATK: ${enemy.atk}`, eX + entitySize, eY - 30, "14px", "white", "right", "Consolas");
     drawText(`DEF: ${enemy.def}`, eX + entitySize, eY - 15, "14px", "white", "right", "Consolas");
     drawText(enemy.name, eX + entitySize / 2, eY - 60, "16px", "red", "center");
-
     drawText(gameState.combatLog, cx + swScaled / 2, cy + shScaled - 40, "italic 16px", "gold");
 }
 
@@ -432,22 +413,28 @@ function drawInfoScreen() {
     drawText(gameState.infoMessage, cx + w / 2, cy + h / 2 + 5, "16px", "white");
 }
 
+function drawErrorScreen(message) {
+    ctx.fillStyle = "#0d0d0f";
+    ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+    drawFrame(canvasWidth / 2 - 300, canvasHeight / 2 - 80, 600, 160, 15, "#e05252", 2);
+    drawText("FAILED TO LOAD MAP", canvasWidth / 2, canvasHeight / 2 - 20, "bold 22px", "#e05252");
+    drawText(message, canvasWidth / 2, canvasHeight / 2 + 20, "14px", "#888888");
+}
+
 // ==================================================
-//  UI Functions
-//===================================================
+//  UI Builder
+// ==================================================
 function gameContainer() {
     return canvas().setId("game");
 }
 
 function app() {
-    return div(
-        gameContainer()
-    ).setId("appContainer").addClass("container");
+    return div(gameContainer()).setId("appContainer").addClass("container");
 }
 
 // ==================================================
-//  Combat & UI Logic
-//===================================================
+//  Combat Logic
+// ==================================================
 function handleCombatAction() {
     if (!gameState.isInCombat || gameState.combatTurn !== "player") return;
 
@@ -495,7 +482,7 @@ function togglePause() {
 
 // ==================================================
 //  Game Logic
-//===================================================
+// ==================================================
 function spawnPlayer(player) {
     for (let row = 0; row < grid.length; row++) {
         for (let col = 0; col < grid[row].length; col++) {
@@ -511,8 +498,7 @@ function spawnPlayer(player) {
 }
 
 function spawnEntity(entity) {
-    let row = entity.row;
-    let col = entity.col;
+    let { row, col } = entity;
     if (isValidPosition(row, col) && getEntityAt(row, col, entityLayer) === null) {
         console.log(`[SPAWN] Entity spawned at (${row}, ${col})`);
         return true;
@@ -533,25 +519,6 @@ function spawnEntityRandom(entity, minDistanceFrom) {
     return false;
 }
 
-// ==================================================
-//  Initialization
-//===================================================
-let appContainer = getById("root");
-appContainer.appendChild(app());
-
-// ==================================================
-//  Canvas Setup
-//===================================================
-const canvasWidth = 16 * factor;
-const canvasHeight = 9 * factor;
-
-const gameCanvas = getById("game");
-const ctx = gameCanvas.get2d();
-gameCanvas.setSize(canvasWidth, canvasHeight)
-
-// ==================================================
-//  Map Loading
-//===================================================
 function instantiateEntity(data) {
     switch (data.type) {
         case "Enemy":
@@ -574,121 +541,41 @@ function instantiateEntity(data) {
     }
 }
 
-function drawErrorScreen(message) {
-    ctx.fillStyle = "#0d0d0f";
-    ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-    drawFrame(canvasWidth / 2 - 300, canvasHeight / 2 - 80, 600, 160, 15, "#e05252", 2);
-    drawText("FAILED TO LOAD MAP", canvasWidth / 2, canvasHeight / 2 - 20, "bold 22px", "#e05252");
-    drawText(message, canvasWidth / 2, canvasHeight / 2 + 20, "14px", "#888888");
-}
+// ==================================================
+//  Game Loop
+// ==================================================
+function gameLoop(now) {
+    clearCanvas();
+    drawMap();
+    if (gameState.inDebugMode) drawGrid();
+    if (!gameState.inDebugMode) tickEnemyAI(now);
 
-function startGame() {
-    gameState.player = new Player("green");
+    drawEntityLayer(entityLayer);
+    if (gameState.player) drawEntity(gameState.player);
+    drawHUD();
 
-    if (!spawnPlayer(gameState.player)) {
-        log(3, "No spawn point found in map!");
-        drawErrorScreen("No START tile found in map.");
-        return;
-    }
+    if (gameState.gameOver) { drawGameOverScreen(); return; }
+    if (gameState.playerWon) { drawVictoryScreen(); return; }
 
-    log(1, `Player spawned at (${gameState.player.row}, ${gameState.player.col})`);
+    if (gameState.isInventoryOpen) { drawInventory(); requestAnimationFrame(gameLoop); return; }
+    if (gameState.isPaused) { drawPauseScreen(); requestAnimationFrame(gameLoop); return; }
 
-    function gameLoop(now) {
-        clearCanvas();
-        drawMap();
-        if (gameState.inDebugMode) {
-            drawGrid();
-        }
-
-        if (!gameState.inDebugMode) {
-            tickEnemyAI(now);
-        }
-
-        drawEntityLayer(entityLayer);
-        if (gameState.player) {
-            drawEntity(gameState.player);
-        }
-        drawHUD();
-
-        if (gameState.gameOver) {
-            drawGameOverScreen();
-            return;
-        }
-        if (gameState.playerWon) {
-            drawVictoryScreen();
-            return;
-        }
-        if (gameState.isInventoryOpen) {
-            drawInventory();
-            requestAnimationFrame(gameLoop);
-            return;
-        }
-        if (gameState.isPaused) {
-            drawPauseScreen();
-            requestAnimationFrame(gameLoop);
-            return;
-        }
-        if (gameState.isInCombat && gameState.currentEnemy) {
-            drawCombatScreen(gameState.player, gameState.currentEnemy);
-        }
-        if (gameState.showInfo) {
-            drawInfoScreen();
-        }
-
-        requestAnimationFrame(gameLoop);
-    }
+    if (gameState.isInCombat && gameState.currentEnemy) drawCombatScreen(gameState.player, gameState.currentEnemy);
+    if (gameState.showInfo) drawInfoScreen();
 
     requestAnimationFrame(gameLoop);
 }
 
-function loadMap(filename) {
-    fetch(filename)
-        .then(res => {
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            return res.json();
-        })
-        .then(data => {
-            if (!data.grid || !data.entities) throw new Error("Invalid map format");
-
-            grid = data.grid;
-            entityLayer = [];
-
-            for (const entityData of data.entities) {
-                const entity = instantiateEntity(entityData);
-                if (entity) entityLayer.push(entity);
-            }
-
-            log(1, `Map loaded: ${filename}`);
-            log(1, `Grid: ${grid[0].length}x${grid.length}, Entities: ${entityLayer.length}`);
-
-            startGame();
-        })
-        .catch(err => {
-            log(3, `Failed to load map: ${err.message}`);
-            drawErrorScreen(`Could not load map.json\n${err.message}`);
-        });
-}
-
-window.onload = () => {
-    loadMap("./maps/map.json");
-};
-
 // ==================================================
 //  Event Handlers
-//===================================================
+// ==================================================
 window.addEventListener("keydown", (event) => {
     if (event.repeat) return;
 
-    if (event.key === "i" || event.key === "I") {
-        toggleInventory();
-        return;
-    }
+    if (event.key === "i" || event.key === "I") { toggleInventory(); return; }
     if (gameState.isInventoryOpen) return;
 
-    if (event.key === "p" || event.key === "P" || event.key === "Escape") {
-        togglePause();
-        return;
-    }
+    if (event.key === "p" || event.key === "P" || event.key === "Escape") { togglePause(); return; }
     if (gameState.isPaused) return;
 
     if (event.key === "~") gameState.inDebugMode = !gameState.inDebugMode;
@@ -717,3 +604,62 @@ window.addEventListener("keydown", (event) => {
         }
     }
 });
+
+// ==================================================
+//  Initialization
+// ==================================================
+function loadMap(filename) {
+    fetch(filename)
+        .then(res => {
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            return res.json();
+        })
+        .then(data => {
+            if (!data.grid || !data.entities) throw new Error("Invalid map format");
+
+            grid = data.grid;
+            entityLayer = [];
+
+            for (const entityData of data.entities) {
+                const entity = instantiateEntity(entityData);
+                if (entity) entityLayer.push(entity);
+            }
+
+            log(1, `Map loaded: ${filename}`);
+            log(1, `Grid: ${grid[0].length}x${grid.length}, Entities: ${entityLayer.length}`);
+
+            if (!spawnPlayer(gameState.player)) {
+                log(3, "No spawn point found in map!");
+                drawErrorScreen("No START tile found in map.");
+                return;
+            }
+
+            log(1, `Player spawned at (${gameState.player.row}, ${gameState.player.col})`);
+            requestAnimationFrame(gameLoop);
+        })
+        .catch(err => {
+            log(3, `Failed to load map: ${err.message}`);
+            drawErrorScreen(`Could not load map.json\n${err.message}`);
+        });
+}
+
+function startGame() {
+    gameState.player = new Player("green");
+    loadMap("../maps/map.json");
+}
+
+// DOM & Canvas setup
+const appContainer = getById("root");
+appContainer.appendChild(app());
+
+const canvasWidth = 16 * factor;
+const canvasHeight = 9 * factor;
+
+const gameCanvas = getById("game");
+const ctx = gameCanvas.get2d();
+gameCanvas.setSize(canvasWidth, canvasHeight);
+
+// Start
+window.onload = () => {
+    startGame();
+};
