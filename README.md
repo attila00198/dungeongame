@@ -42,7 +42,7 @@ Because the game uses local file loading, it should be served over HTTP.  You ca
 
 - Using PHP
 ```sh
-# using Python 3
+# using PHP
 php -S localhost:8000
 ```
 
@@ -59,14 +59,12 @@ Then open `http://localhost:8000/index.html` in your browser.  Use the menu to n
 - ✔ Browser-based dungeon engine
 - ✔ Tile editor for map creation
 - ✔ Player movement and basic interaction
-- ✔ Modular CSS and JavaScript structure
+- ✔ Basic combat
 
 ## Roadmap
 
-- [ ] Procedural dungeon generation
 - [ ] Combat and inventory mechanics
 - [ ] Save/load support
-- [ ] Mobile/touch controls
 - [ ] Additional assets and sound effects
 
 ## Contributing
