@@ -72,7 +72,7 @@ let entities = [];          // [{ type, row, col, ...fields }]
 let selectedTile = null;    // TILE_META entry
 let selectedEntityType = null; // ENTITY_META entry
 let selectedEntityIndex = null; // index in entities[]
-let mode = "none";          // "tile" | "entity" | "erase"
+let mode = "none";          // "tile" | "entity" | "erase" | "select" | "move"
 let isPainting = false;
 
 // ============ CANVAS ============
@@ -115,6 +115,11 @@ function getEntityColor(type) {
     return meta ? meta.color : "#fff";
 }
 
+function isWalkableTile(row, col) {
+    const nonWalkable = [TILE_TYPE.WALL];
+    return !nonWalkable.includes(grid[row][col]);
+}
+
 function drawMap() {
     ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
 
@@ -150,13 +155,22 @@ function drawMap() {
 
         // Border
         if (i === selectedEntityIndex) {
-            ctx.strokeStyle = "#ffffff";
-            ctx.lineWidth = 1.5;
+            if (mode === "move") {
+                ctx.strokeStyle = "#00e5ff";
+                ctx.lineWidth = 2;
+                ctx.setLineDash([3, 3]);
+            } else {
+                ctx.strokeStyle = "#ffffff";
+                ctx.lineWidth = 1.5;
+                ctx.setLineDash([]);
+            }
         } else {
             ctx.strokeStyle = color;
             ctx.lineWidth = 1;
+            ctx.setLineDash([]);
         }
         ctx.strokeRect(x + 1, y + 1, s - 2, s - 2);
+        ctx.setLineDash([]);
 
         // Type initial letter
         ctx.fillStyle = "#fff";
@@ -214,6 +228,32 @@ function eraseAt(row, col) {
     }
 }
 
+function moveEntityTo(row, col) {
+    if (selectedEntityIndex === null) return;
+
+    const existing = getEntityAt(row, col);
+
+    // Másik entity-re kattintott → megszakítás, azt választja ki
+    if (existing !== -1 && existing !== selectedEntityIndex) {
+        showToast("Move cancelled");
+        setMode("select");
+        selectEntity(existing);
+        return;
+    }
+
+    // Nem walkable tile → figyelmeztetés, de odateszi
+    if (!isWalkableTile(row, col)) {
+        showToast("Warning: non-walkable tile", "error");
+    }
+
+    entities[selectedEntityIndex].row = row;
+    entities[selectedEntityIndex].col = col;
+    renderEntityEditor(entities[selectedEntityIndex]);
+    setMode("select");
+    drawMap();
+    showToast("Entity moved");
+}
+
 function handleCanvasInteract(e) {
     const rect = gameCanvas.getBoundingClientRect();
     const col = Math.floor((e.clientX - rect.left) / TILE_SIZE);
@@ -228,6 +268,8 @@ function handleCanvasInteract(e) {
         placeEntity(row, col);
     } else if (mode === "erase") {
         eraseAt(row, col);
+    } else if (mode === "move") {
+        moveEntityTo(row, col);
     } else {
         // select mode OR none: clicking a placed entity selects it
         const idx = getEntityAt(row, col);
@@ -365,6 +407,14 @@ function renderEntityEditor(entity) {
             }
         });
 
+    const moveBtn = btn("✥ Move")
+        .addClass("btn-secondary")
+        .setId("btn-panel-move")
+        .onClick(() => {
+            if (mode === "move") setMode("select");
+            else setMode("move");
+        });
+
     // Regular fields (skip "contents" for Chest — handled separately)
     const fields = meta.fields
         .filter(f => f.key !== "contents")
@@ -402,7 +452,7 @@ function renderEntityEditor(entity) {
         posInfo,
         ...fields,
         ...(chestSection ? [chestSection] : []),
-        div(deleteBtn).addClass("editor-actions")
+        div(moveBtn, deleteBtn).addClass("editor-actions")
     ];
 
     replaceHTML(container, div(...children));
@@ -479,28 +529,45 @@ function showToast(message, type = "") {
 
 // ============ MODE HELPERS ============
 
+const MODE_BUTTONS = {
+    "select": "btn-mode-select",
+    "erase": "btn-mode-erase",
+    "move": "btn-mode-move",
+};
+
 function setMode(newMode) {
     mode = newMode;
     const indicator = getById("modeIndicator");
+
+    // Reset all topbar mode buttons
+    Object.values(MODE_BUTTONS).forEach(id => getById(id)?.removeClass("active"));
+
+    // Activate the matching button
+    if (MODE_BUTTONS[newMode]) getById(MODE_BUTTONS[newMode])?.addClass("active");
+
+    // Update indicator
     indicator.className = "";
-    if (newMode === "tile") { indicator.textContent = "MODE: TILE"; indicator.addClass("mode-tile"); }
-    if (newMode === "entity") { indicator.textContent = "MODE: ENTITY"; indicator.addClass("mode-entity"); }
-    if (newMode === "erase") { indicator.textContent = "MODE: ERASE"; indicator.addClass("mode-erase"); }
-    if (newMode === "select" || newMode === "none") { indicator.textContent = "MODE: SELECT"; indicator.addClass("mode-select"); }
+    const modeConfig = {
+        "tile": { text: "MODE: TILE", cls: "mode-tile" },
+        "entity": { text: "MODE: ENTITY", cls: "mode-entity" },
+        "erase": { text: "MODE: ERASE", cls: "mode-erase" },
+        "move": { text: "MODE: MOVE", cls: "mode-move" },
+    };
+    const cfg = modeConfig[newMode];
+    if (cfg) {
+        indicator.textContent = cfg.text;
+        indicator.addClass(cfg.cls);
+    } else {
+        indicator.textContent = "MODE: SELECT";
+        indicator.addClass("mode-select");
+    }
 
-    // Update topbar button active state
-    ["btn-mode-erase", "btn-mode-select"].forEach(id => {
-        const el = getById(id);
-        if (el) el.removeClass("active");
-    });
-    if (newMode === "erase") getById("btn-mode-erase")?.addClass("active");
-    if (newMode === "select") getById("btn-mode-select")?.addClass("active");
-
-    // Clear sidebar selection if switching away from tile/entity modes
-    if (newMode === "select" || newMode === "erase" || newMode === "none") {
+    // Clear sidebar selection when leaving tile/entity modes
+    if (!["tile", "entity"].includes(newMode)) {
         selectedTile = null;
         selectedEntityType = null;
-        document.querySelectorAll("#tileList li, #entityList li").forEach(li => li.classList.remove("selected"));
+        document.querySelectorAll("#tileList li, #entityList li")
+            .forEach(li => li.classList.remove("selected"));
     }
 }
 
@@ -563,10 +630,10 @@ function buildSidebar() {
 }
 
 function buildTopbar() {
-    const modeIndicator = span("MODE: SELECT").setId("modeIndicator");
+    const modeIndicator = span("MODE: SELECT").setId("modeIndicator").addClass("mode-select");
 
     const selectBtn = btn("↖ Select")
-        .addClass("btn-topbar")
+        .setClasses("btn-topbar active")
         .setId("btn-mode-select")
         .onClick(() => {
             if (mode === "select") setMode("none");
@@ -579,6 +646,18 @@ function buildTopbar() {
         .onClick(() => {
             if (mode === "erase") setMode("none");
             else setMode("erase");
+        });
+
+    const moveBtn = btn("✥ Move")
+        .addClass("btn-topbar")
+        .setId("btn-mode-move")
+        .onClick(() => {
+            if (mode === "move") setMode("select");
+            else if (selectedEntityIndex === null) {
+                showToast("No entity selected", "error");
+            } else {
+                setMode("move");
+            }
         });
 
     const clearBtn = btn("Clear Map")
@@ -600,6 +679,7 @@ function buildTopbar() {
         div().addClass("sep"),
         selectBtn,
         eraseBtn,
+        moveBtn,
         clearBtn,
         div().addClass("sep"),
         importBtn,
@@ -659,17 +739,36 @@ gameCanvas.addEventListener("mouseup", () => { isPainting = false; });
 gameCanvas.addEventListener("mouseleave", () => { isPainting = false; });
 
 document.addEventListener("keydown", (e) => {
+    // Ne aktiválódjon ha egy input mezőbe gépelünk
+    if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+
     if (e.key === "Escape") {
         setMode("none");
         selectedTile = null;
         selectedEntityType = null;
         document.querySelectorAll("#tileList li, #entityList li").forEach(li => li.classList.remove("selected"));
     }
+
+    if (e.key === "s" || e.key === "S") {
+        if (mode === "select") setMode("none");
+        else setMode("select");
+    }
+
     if (e.key === "e" || e.key === "E") {
         if (mode === "erase") setMode("none");
         else setMode("erase");
-        getById("btn-mode-erase")?.toggleClass("active");
     }
+
+    if (e.key === "m" || e.key === "M") {
+        if (mode === "move") {
+            setMode("select");
+        } else if (selectedEntityIndex === null) {
+            showToast("No entity selected", "error");
+        } else {
+            setMode("move");
+        }
+    }
+
     if (e.key === "Delete" && selectedEntityIndex !== null) {
         entities.splice(selectedEntityIndex, 1);
         selectedEntityIndex = null;

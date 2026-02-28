@@ -323,9 +323,13 @@ button {
 
 .editor-actions {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   gap: 6px;
   margin-top: 16px;
+}
+
+.editor-actions button {
+  flex: 1;
 }
 
 /* ===== MODE INDICATOR ===== */
@@ -358,6 +362,11 @@ button {
   color: var(--success);
   border-color: var(--success);
   background: rgba(82, 192, 122, 0.08);
+}
+#modeIndicator.mode-move {
+  color: #c084fc;
+  border-color: #c084fc;
+  background: rgba(192, 132, 252, 0.08);
 }
 
 /* ===== ENTITY MARKER on canvas hover ===== */
