@@ -76,22 +76,35 @@ function isInViewRange(entity, player) {
 
 function hasLineOfSight(entity, player) {
     if (!isInViewRange(entity, player)) return false;
-    if (!player) return;
+    if (!player) return false;
+
     let x1 = player.col, y1 = player.row;
     let x2 = entity.col, y2 = entity.row;
     let dx = x2 - x1, dy = y2 - y1;
     let steps = Math.max(Math.abs(dx), Math.abs(dy)) * 2;
     if (steps === 0) return true;
+
     for (let i = 1; i <= steps; i++) {
         let t = i / steps;
-        let checkCol = Math.round(x1 + dx * t);
-        let checkRow = Math.round(y1 + dy * t);
-        if (checkCol === x2 && checkRow === y2) return true;
-        const tile = TILE_BY_ID[grid[checkRow][checkCol]];
-        if (tile === TILE_T.WALL) return false;
-        const blocker = getEntityAt(checkRow, checkCol, entityLayer);
-        if (blocker instanceof Door && !blocker.isOpen) return false;
+        let exactCol = x1 + dx * t;
+        let exactRow = y1 + dy * t;
+
+        // Mindkét szomszédos cellát ellenőrizzük átlós sugárnál
+        const cellsToCheck = [
+            { r: Math.floor(exactRow), c: Math.floor(exactCol) },
+            { r: Math.ceil(exactRow), c: Math.ceil(exactCol) },
+        ];
+
+        for (const { r, c } of cellsToCheck) {
+            if (r === y2 && c === x2) return true; // célnál vagyunk
+            if (!grid[r] || grid[r][c] === undefined) continue;
+            const tile = TILE_BY_ID[grid[r][c]];
+            if (tile === TILE_T.WALL) return false;
+            const blocker = getEntityAt(r, c, entityLayer);
+            if (blocker instanceof Door && !blocker.isOpen) return false;
+        }
     }
+
     return true;
 }
 
