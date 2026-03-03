@@ -10,7 +10,7 @@ const TILE_T = {
     FLOOR: { id: 0, color: "#4e170d", isWalkable: true, hasEffect: false },
     WALL: { id: 1, color: "#101010", isWalkable: false, hasEffect: false },
     WATER: { id: 2, color: "#1a3a6a", isWalkable: true, hasEffect: true },
-    FIRE: { id: 3, color: "#8B4513", isWalkable: true, hasEffect: true },
+    FIRE: { id: 3, color: "#ff6600", isWalkable: true, hasEffect: true },
     START: { id: 4, color: "#8a7200", isWalkable: true, hasEffect: false },
     EXIT: { id: 5, color: "#006a6a", isWalkable: true, hasEffect: false },
 };
@@ -68,14 +68,14 @@ function isValidPosition(row, col) {
     return tile?.isWalkable ?? false;
 }
 
-function isInViewRange(entity, player) {
+function isValidRange(entity, player) {
     let dx = entity.col - player.col;
     let dy = entity.row - player.row;
     return Math.abs(dx) + Math.abs(dy) <= VIEW_DISTANCE;
 }
 
 function hasLineOfSight(entity, player) {
-    if (!isInViewRange(entity, player)) return false;
+    if (!isValidRange(entity, player)) return false;
     if (!player) return false;
 
     let x1 = player.col, y1 = player.row;
