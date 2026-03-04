@@ -120,9 +120,93 @@ class Player extends Actor {
     }
 }
 class Enemy extends Actor {
-    constructor(row, col, name, health, atk, def, color) {
+    static MOVE_INTERVAL = 400;
+    static lastMoveTime = 0;
+
+    static tick(now, player) {
+        if (!player) return;
+        if (now - Enemy.lastMoveTime < Enemy.MOVE_INTERVAL) return;
+        Enemy.lastMoveTime = now;
+
+        for (const entity of entityLayer) {
+            if (!(entity instanceof Enemy)) continue;
+            if (!entity.isAlive()) continue;
+            entity.update(player);
+        }
+    }
+
+    constructor(row, col, name, health, atk, def, color, state = "doIdle") {
         super(row, col, color, 15, health, atk, def);
         this.name = name;
+        this.state = state;
+        this.lastKnownPlayerRow = null;
+        this.lastKnownPlayerCol = null;
+        this.transitions = {
+            doIdle: { seesPlayer: "doChase" },
+            doChase: { losesPlayer: "doIdle", reachesLastKnown: "doIdle" },
+        };
+    }
+
+    doIdle() { }
+
+    doChase(player) {
+        const dr = Math.abs(this.row - player.row);
+        const dc = Math.abs(this.col - player.col);
+
+        // Szomszédos -> harcot kezdeményez
+        if (dr + dc === 1) {
+            if (!gameState.isInCombat) {
+                gameState.isInCombat = true;
+                gameState.currentEnemy = this;
+                gameState.combatTurn = "player";
+                gameState.combatLog = `${this.name} támad! Nyomj SPACE-t!`;
+            }
+            return;
+        }
+
+        // BFS lépés az utolsó ismert pozíció felé
+        const targetRow = this.lastKnownPlayerRow ?? player.row;
+        const targetCol = this.lastKnownPlayerCol ?? player.col;
+        const next = bfsNextStep(this.row, this.col, targetRow, targetCol);
+
+        if (next) {
+            const blocker = getEntityAt(next.row, next.col, entityLayer);
+            const canStep = !blocker
+                || blocker instanceof Player
+                || (blocker instanceof Door && blocker.isOpen);
+            if (canStep) {
+                this.row = next.row;
+                this.col = next.col;
+            }
+        }
+
+        // Elérte az utolsó ismert pozíciót, és a játékos már nincs ott
+        const atLastKnown =
+            this.row === this.lastKnownPlayerRow &&
+            this.col === this.lastKnownPlayerCol;
+        if (atLastKnown) this.trigger("reachesLastKnown");
+    }
+
+    trigger(event) {
+        const current = this.transitions[this.state];
+        if (current && current[event]) {
+            this.state = current[event];
+        }
+    }
+
+    update(player) {
+        if (gameState.isInCombat || gameState.isPaused ||
+            gameState.gameOver || gameState.playerWon) return;
+
+        if (hasLineOfSight(this, player)) {
+            this.lastKnownPlayerRow = player.row;
+            this.lastKnownPlayerCol = player.col;
+            this.trigger("seesPlayer");
+        } else if (this.state === "doChase") {
+            this.trigger("losesPlayer");
+        }
+
+        this[this.state](player);
     }
 }
 
@@ -238,5 +322,88 @@ class Chest extends GameObject {
         }
         showInfoMessage(`Chest opened! Found: ${itemNames.join(", ")}`);
         console.log(`[CHEST] Opened!`);
+    }
+}
+
+class Renderer {
+    constructor(canvas, width, height) {
+        this.canvas = canvas
+        this.canvas.setSize(width, height)
+        this.ctx = canvas.get2d()
+        this.cellSize = 20
+    }
+
+    clear(color = "black") {
+        this.ctx.fillStyle = color
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height)
+    }
+
+    drawRect(x, y, w, h, color) {
+        this.ctx.fillStyle = color;
+        this.ctx.fillRect(x, y, w, h);
+    }
+
+    drawTriangle(x1, y1, x2, y2, x3, y3, color) {
+        this.ctx.fillStyle = color;
+        this.ctx.beginPath();
+        this.ctx.moveTo(x1, y1);
+        this.ctx.lineTo(x2, y2);
+        this.ctx.lineTo(x3, y3);
+        this.ctx.closePath();
+        this.ctx.fill();
+    }
+
+    drawCircle(cx, cy, radius, color) {
+        this.ctx.fillStyle = color;
+        this.ctx.beginPath();
+        this.ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+        this.ctx.fill();
+    }
+
+    drawText(text, x, y, size = "16px", color = "white", align = "center", font = "Arial") {
+        this.ctx.fillStyle = color;
+        this.ctx.font = size + " " + font;
+        this.ctx.textAlign = align;
+        this.ctx.fillText(text, x, y);
+    }
+
+    drawLine(startX, startY, endX, endY, color = "white", thickness = 1) {
+        this.ctx.strokeStyle = color;
+        this.ctx.lineWidth = thickness;
+        this.ctx.beginPath();
+        this.ctx.moveTo(startX, startY);
+        this.ctx.lineTo(endX, endY);
+        this.ctx.stroke();
+    }
+
+    drawFrame(x, y, w, h, offset, color = "orange", thickness = 2) {
+        this.ctx.strokeStyle = color;
+        this.ctx.lineWidth = thickness;
+        let innerX = x + offset, innerY = y + offset;
+        let innerW = w - offset * 2, innerH = h - offset * 2;
+        this.ctx.beginPath();
+        this.ctx.moveTo(innerX, innerY);
+        this.ctx.lineTo(innerX + innerW, innerY);
+        this.ctx.lineTo(innerX + innerW, innerY + innerH);
+        this.ctx.lineTo(innerX, innerY + innerH);
+        this.ctx.closePath();
+        this.ctx.stroke();
+    }
+
+    drawGrid(color = "black", thickness = 1) {
+        this.ctx.strokeStyle = color;
+        this.ctx.lineWidth = thickness;
+        for (let col = 0; col <= GRID_WIDTH; col++) {
+            this.ctx.beginPath();
+            this.ctx.moveTo(col * TILE_SIZE, 0);
+            this.ctx.lineTo(col * TILE_SIZE, canvasHeight);
+            this.ctx.stroke();
+        }
+        for (let row = 0; row <= GRID_HEIGHT; row++) {
+            this.ctx.beginPath();
+            this.ctx.moveTo(0, row * TILE_SIZE);
+            this.ctx.lineTo(canvasWidth, row * TILE_SIZE);
+            this.ctx.stroke();
+        }
     }
 }

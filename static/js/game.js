@@ -27,7 +27,7 @@ const VIEW_DISTANCE = 8;
 let grid = [];
 let entityLayer = [];
 
-let gameState = {
+const gameState = {
     player: null,
     animationId: null,
     inDebugMode: false,
@@ -132,79 +132,61 @@ function getTileTypeAt(row, col) {
     return grid[row][col];
 }
 
+function bfsNextStep(fromRow, fromCol, toRow, toCol) {
+    if (fromRow === toRow && fromCol === toCol) return null;
+
+    const queue = [{ row: fromRow, col: fromCol, path: [] }];
+    const visited = new Set();
+    visited.add(`${fromRow},${fromCol}`);
+
+    const dirs = [
+        { dr: -1, dc: 0 },
+        { dr: 1, dc: 0 },
+        { dr: 0, dc: -1 },
+        { dr: 0, dc: 1 },
+    ];
+
+    while (queue.length > 0) {
+        const { row, col, path } = queue.shift();
+
+        for (const { dr, dc } of dirs) {
+            const nr = row + dr;
+            const nc = col + dc;
+            const key = `${nr},${nc}`;
+            let tile = TILE_BY_ID[grid[nr][nc]];
+
+
+            if (visited.has(key)) continue;
+            visited.add(key);
+
+            // Cél elérve
+            if (nr === toRow && nc === toCol) {
+                const fullPath = [...path, { row: nr, col: nc }];
+                return fullPath[0]; // következő lépés
+            }
+
+            // Csak járható tile-on mehet át (de a célnál nem ellenőrizzük — ott van az entitás)
+            if (!grid[nr]) continue;
+            tile = TILE_BY_ID[grid[nr][nc]];
+            if (!tile?.isWalkable) continue;
+
+            // Ne menjen olyan mezőre ahol másik enemy áll (kivéve a cél)
+            if (!grid[nr]) continue;
+            tile = TILE_BY_ID[grid[nr][nc]];
+            if (!tile?.isWalkable) continue;
+            const occupant = getEntityAt(nr, nc, entityLayer);
+            if (occupant instanceof Door && !occupant.isOpen) continue;
+
+            queue.push({ row: nr, col: nc, path: [...path, { row: nr, col: nc }] });
+        }
+    }
+
+    return null; // nincs elérhető út
+}
+
 // ==================================================
 //  Rendering Functions
 // ==================================================
-function clearCanvas() {
-    ctx.fillStyle = TILE_T.FLOOR.color;
-    ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-}
-
-function drawRect(x, y, w, h, color) {
-    ctx.fillStyle = color;
-    ctx.fillRect(x, y, w, h);
-}
-
-function drawText(text, x, y, size = "16px", color = "white", align = "center", font = "Arial") {
-    ctx.fillStyle = color;
-    ctx.font = size + " " + font;
-    ctx.textAlign = align;
-    ctx.fillText(text, x, y);
-}
-
-function drawFrame(x, y, w, h, offset, color = "orange", thickness = 2) {
-    ctx.strokeStyle = color;
-    ctx.lineWidth = thickness;
-    let innerX = x + offset, innerY = y + offset;
-    let innerW = w - offset * 2, innerH = h - offset * 2;
-    ctx.beginPath();
-    ctx.moveTo(innerX, innerY);
-    ctx.lineTo(innerX + innerW, innerY);
-    ctx.lineTo(innerX + innerW, innerY + innerH);
-    ctx.lineTo(innerX, innerY + innerH);
-    ctx.closePath();
-    ctx.stroke();
-}
-
-function drawMap() {
-    for (let row = 0; row < grid.length; row++) {
-        for (let col = 0; col < grid[row].length; col++) {
-            const tile = TILE_BY_ID[grid[row][col]];
-            ctx.fillStyle = tile?.color ?? "#000";
-            ctx.fillRect(col * TILE_SIZE, row * TILE_SIZE, TILE_SIZE, TILE_SIZE);
-        }
-    }
-}
-
-function drawGrid() {
-    ctx.strokeStyle = "#404040";
-    ctx.lineWidth = 1;
-    for (let col = 0; col <= GRID_WIDTH; col++) {
-        ctx.beginPath();
-        ctx.moveTo(col * TILE_SIZE, 0);
-        ctx.lineTo(col * TILE_SIZE, canvasHeight);
-        ctx.stroke();
-    }
-    for (let row = 0; row <= GRID_HEIGHT; row++) {
-        ctx.beginPath();
-        ctx.moveTo(0, row * TILE_SIZE);
-        ctx.lineTo(canvasWidth, row * TILE_SIZE);
-        ctx.stroke();
-    }
-}
-
-function drawEntity(entity) {
-    if (!entity) return;
-    if (entity.row >= 0) {
-        let cx = entity.col * TILE_SIZE + (TILE_SIZE - entity.size) / 2;
-        let cy = entity.row * TILE_SIZE + (TILE_SIZE - entity.size) / 2;
-        drawRect(cx, cy, entity.size, entity.size, entity.color);
-        if (gameState.inDebugMode) {
-            drawText(`${entity.row}:${entity.col}`, cx + entity.size / 2, cy + entity.size / 2, "16px", "white", "center");
-        }
-    }
-}
-
 function drawEntityLayer(entityList) {
     // Pass 1: structures (Door, Chest, stb.) — mindig alul
     for (let e of entityList) {
@@ -221,91 +203,72 @@ function drawEntityLayer(entityList) {
     }
 }
 
+function drawEntity(entity) {
+    if (!entity) return;
+    if (entity.row >= 0) {
+        let cx = entity.col * TILE_SIZE + (TILE_SIZE - entity.size) / 2;
+        let cy = entity.row * TILE_SIZE + (TILE_SIZE - entity.size) / 2;
+        r.drawRect(cx, cy, entity.size, entity.size, entity.color);
+        if (gameState.inDebugMode) {
+            r.drawText(`${entity.row}:${entity.col}`, cx + entity.size / 2, cy + entity.size / 2, "16px", "white", "center");
+        }
+    }
+}
+
 function drawHUD() {
     const hudHeight = 50;
     const padding = 15;
     const iconSize = 32;
     const hudY = canvasHeight - hudHeight;
 
-    ctx.fillStyle = "rgba(16, 16, 16, 0.85)";
-    ctx.fillRect(0, hudY, canvasWidth, hudHeight);
-
-    ctx.strokeStyle = "#444";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(0, hudY);
-    ctx.lineTo(canvasWidth, hudY);
-    ctx.stroke();
+    r.drawRect(0, hudY, canvasWidth, hudHeight, "rgba(16, 16, 16, 0.85)");
+    r.drawLine(0, hudY, canvasWidth, hudY, "#444444", 2);
 
     const textY = hudY + padding + 7;
     let currentX = padding;
 
     // HP
-    ctx.fillStyle = "#ff4444";
-    ctx.fillRect(currentX, hudY + padding - 4, iconSize, iconSize - 16);
-    ctx.fillStyle = "white";
-    ctx.font = "bold 14px Courier New";
-    ctx.textAlign = "left";
-    ctx.fillText(`${gameState.player.health}/100`, currentX + iconSize + 8, textY);
+    r.drawRect(currentX, hudY + padding - 4, iconSize, iconSize - 16, "#ff4444");
+    r.drawText(`${gameState.player.health}/100`, currentX + iconSize + 8, textY, "bold 14px", "white", "left", "Courier New");
     currentX += iconSize + 70;
 
     // ATK
-    ctx.fillStyle = "#ff8844";
-    ctx.beginPath();
-    ctx.moveTo(currentX + iconSize / 2, hudY + padding - 4);
-    ctx.lineTo(currentX + iconSize - 4, hudY + hudHeight - padding);
-    ctx.lineTo(currentX + 4, hudY + hudHeight - padding);
-    ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = "white";
-    ctx.fillText(`${gameState.player.atk}`, currentX + iconSize + 8, textY);
+    r.drawTriangle(
+        currentX + iconSize / 2, hudY + padding - 4,
+        currentX + iconSize - 4, hudY + hudHeight - padding,
+        currentX + 4, hudY + hudHeight - padding,
+        "#ff8844"
+    );
+    r.drawText(`${gameState.player.atk}`, currentX + iconSize + 8, textY, "14px", "white", "left", "Courier New");
     currentX += iconSize + 50;
 
     // DEF
-    ctx.fillStyle = "#4488ff";
-    ctx.beginPath();
-    ctx.arc(currentX + iconSize / 2, hudY + hudHeight / 2, iconSize / 2 - 4, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = "white";
-    ctx.fillText(`${gameState.player.def}`, currentX + iconSize + 8, textY);
+    r.drawCircle(currentX + iconSize / 2, hudY + hudHeight / 2, iconSize / 2 - 4, "#4488ff");
+    r.drawText(`${gameState.player.def}`, currentX + iconSize + 8, textY, "14px", "white", "left", "Courier New");
     currentX += iconSize + 70;
 
     // Divider
-    ctx.strokeStyle = "#444";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(currentX, hudY + padding);
-    ctx.lineTo(currentX, hudY + hudHeight - padding);
-    ctx.stroke();
+    r.drawLine(currentX, hudY + padding, currentX, hudY + hudHeight - padding, "#444444", 2);
     currentX += 20;
 
     // Enemies remaining
     const enemiesLeft = entityLayer.filter(e => e instanceof Enemy).length;
-    ctx.fillStyle = "#ff4444";
-    ctx.fillRect(currentX, hudY + padding - 4, iconSize - 8, iconSize - 8);
-    ctx.fillStyle = "white";
-    ctx.font = "14px Courier New";
-    ctx.fillText(`Enemies: ${enemiesLeft}`, currentX + iconSize + 8, textY);
+    r.drawRect(currentX, hudY + padding - 4, iconSize - 8, iconSize - 8, "#ff4444");
+    r.drawText(`Enemies: ${enemiesLeft}`, currentX + iconSize + 8, textY, "14px", "white", "left", "Courier New");
     currentX += iconSize + 130;
 
     // Keys
     const keyCount = gameState.player.inventory.filter(item =>
         item.toLowerCase().includes("key")
     ).length;
-    ctx.fillStyle = "#ffdd44";
-    ctx.fillRect(currentX + 4, hudY + padding - 4, iconSize - 16, iconSize - 16);
-    ctx.fillRect(currentX + iconSize - 12, hudY + padding + 2, 8, iconSize - 26);
-    ctx.fillStyle = "white";
-    ctx.fillText(`Keys: ${keyCount}`, currentX + iconSize + 8, textY);
+    r.drawRect(currentX + 4, hudY + padding - 4, iconSize - 16, iconSize - 16, "#ffdd44");
+    r.drawRect(currentX + iconSize - 12, hudY + padding + 2, 8, iconSize - 26, "#ffdd44");
+    r.drawText(`Keys: ${keyCount}`, currentX + iconSize + 8, textY, "14px", "white", "left", "Courier New");
     currentX += iconSize + 100;
 
     // Gold
-    ctx.fillStyle = "gold";
-    ctx.beginPath();
-    ctx.arc(currentX + 10, hudY + hudHeight / 2, 9, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = "white";
-    ctx.fillText(`${gameState.player.gold} gold`, currentX + 26, textY);
+    r.drawCircle(currentX + 10, hudY + hudHeight / 2, 9, "gold");
+    r.drawText(`${gameState.player.gold} gold`, currentX + 26, textY, "14px", "white", "left", "Courier New");
 }
 
 function drawCombatScreen(player, enemy) {
@@ -314,9 +277,9 @@ function drawCombatScreen(player, enemy) {
     let cx = (canvasWidth - swScaled) / 2;
     let cy = (canvasHeight - shScaled) / 2;
 
-    drawRect(cx, cy, swScaled, shScaled, "#1a1a1a");
-    drawFrame(cx, cy, swScaled, shScaled, 20, "orange", 3);
-    drawText("COMBAT", cx + swScaled / 2, cy + 50, "bold 24px");
+    r.drawRect(cx, cy, swScaled, shScaled, "#1a1a1a");
+    r.drawFrame(cx, cy, swScaled, shScaled, 20, "orange", 3);
+    r.drawText("COMBAT", cx + swScaled / 2, cy + 50, "bold 24px");
 
     const entitySize = 100;
     const pX = cx + 100;
@@ -324,27 +287,27 @@ function drawCombatScreen(player, enemy) {
 
     const pColor = player.flashFrames > 0 ? "white" : player.color;
     if (player.flashFrames > 0) player.flashFrames--;
-    drawRect(pX, pY, entitySize, entitySize, pColor);
+    r.drawRect(pX, pY, entitySize, entitySize, pColor);
 
-    if (gameState.combatTurn === "player") drawText("▼", pX + entitySize / 2, pY - 75, "20px", "gold");
-    drawText(`HP: ${player.health}`, pX, pY - 45, "14px", "white", "left", "Consolas");
-    drawText(`ATK: ${player.atk}`, pX, pY - 30, "14px", "white", "left", "Consolas");
-    drawText(`DEF: ${player.def}`, pX, pY - 15, "14px", "white", "left", "Consolas");
-    drawText("Player", pX + entitySize / 2, pY - 60, "16px", "green", "center");
+    if (gameState.combatTurn === "player") r.drawText("▼", pX + entitySize / 2, pY - 75, "20px", "gold");
+    r.drawText(`HP: ${player.health}`, pX, pY - 45, "14px", "white", "left", "Consolas");
+    r.drawText(`ATK: ${player.atk}`, pX, pY - 30, "14px", "white", "left", "Consolas");
+    r.drawText(`DEF: ${player.def}`, pX, pY - 15, "14px", "white", "left", "Consolas");
+    r.drawText("Player", pX + entitySize / 2, pY - 60, "16px", "green", "center");
 
     const eX = cx + swScaled - 100 - entitySize;
     const eY = cy + shScaled / 2;
 
     const eColor = enemy.flashFrames > 0 ? "white" : enemy.color;
     if (enemy.flashFrames > 0) enemy.flashFrames--;
-    drawRect(eX, eY, entitySize, entitySize, eColor);
+    r.drawRect(eX, eY, entitySize, entitySize, eColor);
 
-    if (gameState.combatTurn === "enemy") drawText("▼", eX + entitySize / 2, eY - 75, "20px", "gold");
-    drawText(`HP: ${enemy.health}`, eX + entitySize, eY - 45, "14px", "white", "right", "Consolas");
-    drawText(`ATK: ${enemy.atk}`, eX + entitySize, eY - 30, "14px", "white", "right", "Consolas");
-    drawText(`DEF: ${enemy.def}`, eX + entitySize, eY - 15, "14px", "white", "right", "Consolas");
-    drawText(enemy.name, eX + entitySize / 2, eY - 60, "16px", "red", "center");
-    drawText(gameState.combatLog, cx + swScaled / 2, cy + shScaled - 40, "italic 16px", "gold");
+    if (gameState.combatTurn === "enemy") r.drawText("▼", eX + entitySize / 2, eY - 75, "20px", "gold");
+    r.drawText(`HP: ${enemy.health}`, eX + entitySize, eY - 45, "14px", "white", "right", "Consolas");
+    r.drawText(`ATK: ${enemy.atk}`, eX + entitySize, eY - 30, "14px", "white", "right", "Consolas");
+    r.drawText(`DEF: ${enemy.def}`, eX + entitySize, eY - 15, "14px", "white", "right", "Consolas");
+    r.drawText(enemy.name, eX + entitySize / 2, eY - 60, "16px", "red", "center");
+    r.drawText(gameState.combatLog, cx + swScaled / 2, cy + shScaled - 40, "italic 16px", "gold");
 }
 
 function drawInventory() {
@@ -353,25 +316,19 @@ function drawInventory() {
     let cx = (canvasWidth - swScaled) / 2;
     let cy = (canvasHeight - shScaled) / 2;
 
-    drawRect(cx, cy, swScaled, shScaled, "#1a1a1a");
-    drawFrame(cx, cy, swScaled, shScaled, 15, "gold", 3);
-    drawText("INVENTORY", cx + swScaled / 2, cy + 40, "bold 24px", "gold");
-
-    ctx.strokeStyle = "#444";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(cx + 30, cy + 55);
-    ctx.lineTo(cx + swScaled - 30, cy + 55);
-    ctx.stroke();
+    r.drawRect(cx, cy, swScaled, shScaled, "#1a1a1a");
+    r.drawFrame(cx, cy, swScaled, shScaled, 15, "gold", 3);
+    r.drawText("INVENTORY", cx + swScaled / 2, cy + 40, "bold 24px", "gold");
+    r.drawLine(cx + 30, cy + 55, cx + swScaled - 30, cy + 55, "#444444", 2);
 
     let startY = cy + 85;
-    drawText(`Gold: ${gameState.player.gold}`, cx + 30, startY, "18px", "#ffd700", "left");
+    r.drawText(`Gold: ${gameState.player.gold}`, cx + 30, startY, "18px", "#ffd700", "left");
 
     startY += 40;
-    drawText("Keys:", cx + 30, startY, "bold 18px", "white", "left");
+    r.drawText("Keys:", cx + 30, startY, "bold 18px", "white", "left");
 
     if (gameState.player.inventory.length === 0) {
-        drawText("(none)", cx + 50, startY + 30, "16px", "#888", "left");
+        r.drawText("(none)", cx + 50, startY + 30, "16px", "#888", "left");
     } else {
         let keyY = startY + 30;
         for (let item of gameState.player.inventory) {
@@ -379,59 +336,67 @@ function drawInventory() {
             if (item.includes("Gold")) iconColor = "gold";
             if (item.includes("Silver")) iconColor = "silver";
             if (item.includes("Red")) iconColor = "red";
-            drawRect(cx + 50, keyY - 12, 16, 16, iconColor);
-            drawText(item, cx + 75, keyY, "16px", "white", "left");
+            r.drawRect(cx + 50, keyY - 12, 16, 16, iconColor);
+            r.drawText(item, cx + 75, keyY, "16px", "white", "left");
             keyY += 30;
         }
     }
 
-    drawText("Press [I] to close", cx + swScaled / 2, cy + shScaled - 25, "14px", "#888");
+    r.drawText("Press [I] to close", cx + swScaled / 2, cy + shScaled - 25, "14px", "#888");
 }
 
 function drawPauseScreen() {
     let w = 400, h = 200;
     let cx = canvasWidth / 2 - w / 2;
     let cy = canvasHeight / 2 - h / 2;
-    drawRect(cx, cy, w, h, "#101010");
-    drawFrame(cx, cy, w, h, 10, "yellow", 2);
-    drawText("PAUSED", canvasWidth / 2, canvasHeight / 2, "bold 32px", "yellow");
+    r.drawRect(cx, cy, w, h, "#101010");
+    r.drawFrame(cx, cy, w, h, 10, "yellow", 2);
+    r.drawText("PAUSED", canvasWidth / 2, canvasHeight / 2, "bold 32px", "yellow");
 }
 
 function drawVictoryScreen() {
     let w = canvasWidth * 0.6, h = canvasHeight * 0.4;
     let cx = (canvasWidth - w) / 2;
     let cy = (canvasHeight - h) / 2;
-    drawRect(cx, cy, w, h, "#1a4d1a");
-    drawFrame(cx, cy, w, h, 20, "gold", 4);
-    drawText("VICTORY!", cx + w / 2, cy + h / 2 - 20, "bold 32px", "gold");
-    drawText("You escaped the dungeon!", cx + w / 2, cy + h / 2 + 20, "18px", "white");
+    r.drawRect(cx, cy, w, h, "#1a4d1a");
+    r.drawFrame(cx, cy, w, h, 20, "gold", 4);
+    r.drawText("VICTORY!", cx + w / 2, cy + h / 2 - 20, "bold 32px", "gold");
+    r.drawText("You escaped the dungeon!", cx + w / 2, cy + h / 2 + 20, "18px", "white");
 }
 
 function drawGameOverScreen() {
     let w = canvasWidth * 0.6, h = canvasHeight * 0.4;
     let cx = (canvasWidth - w) / 2;
     let cy = (canvasHeight - h) / 2;
-    drawRect(cx, cy, w, h, "#4d1a1a");
-    drawFrame(cx, cy, w, h, 20, "darkred", 4);
-    drawText("GAME OVER", cx + w / 2, cy + h / 2 - 20, "bold 32px", "red");
-    drawText("You have been defeated...", cx + w / 2, cy + h / 2 + 20, "18px", "white");
+    r.drawRect(cx, cy, w, h, "#4d1a1a");
+    r.drawFrame(cx, cy, w, h, 20, "darkred", 4);
+    r.drawText("GAME OVER", cx + w / 2, cy + h / 2 - 20, "bold 32px", "red");
+    r.drawText("You have been defeated...", cx + w / 2, cy + h / 2 + 20, "18px", "white");
 }
 
 function drawInfoScreen() {
     let w = canvasWidth * 0.6, h = canvasHeight * 0.15;
     let cx = (canvasWidth - w) / 2;
     let cy = canvasHeight - h - 40;
-    drawRect(cx, cy, w, h, "#1a1a4d");
-    drawFrame(cx, cy, w, h, 10, "cyan", 3);
-    drawText(gameState.infoMessage, cx + w / 2, cy + h / 2 + 5, "16px", "white");
+    r.drawRect(cx, cy, w, h, "#1a1a4d");
+    r.drawFrame(cx, cy, w, h, 10, "cyan", 3);
+    r.drawText(gameState.infoMessage, cx + w / 2, cy + h / 2 + 5, "16px", "white");
 }
 
 function drawErrorScreen(message) {
-    ctx.fillStyle = "#0d0d0f";
-    ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-    drawFrame(canvasWidth / 2 - 300, canvasHeight / 2 - 80, 600, 160, 15, "#e05252", 2);
-    drawText("FAILED TO LOAD MAP", canvasWidth / 2, canvasHeight / 2 - 20, "bold 22px", "#e05252");
-    drawText(message, canvasWidth / 2, canvasHeight / 2 + 20, "14px", "#888888");
+    r.drawRect(0, 0, canvasWidth, canvasHeight, "#0d0d0f");
+    r.drawFrame(canvasWidth / 2 - 300, canvasHeight / 2 - 80, 600, 160, 15, "#e05252", 2);
+    r.drawText("FAILED TO LOAD MAP", canvasWidth / 2, canvasHeight / 2 - 20, "bold 22px", "#e05252");
+    r.drawText(message, canvasWidth / 2, canvasHeight / 2 + 20, "14px", "#888888");
+}
+
+function drawMap() {
+    for (let row = 0; row < grid.length; row++) {
+        for (let col = 0; col < grid[row].length; col++) {
+            const tile = TILE_BY_ID[grid[row][col]];
+            r.drawRect(col * TILE_SIZE, row * TILE_SIZE, TILE_SIZE, TILE_SIZE, tile.color)
+        }
+    }
 }
 
 // ==================================================
@@ -557,22 +522,63 @@ function instantiateEntity(data) {
 // ==================================================
 //  Game Loop
 // ==================================================
-function gameLoop(now) {
-    clearCanvas();
-    drawMap();
-    if (gameState.inDebugMode) drawGrid();
-    if (!gameState.inDebugMode) tickEnemyAI(now);
+function loadMap(filename) {
+    fetch(filename)
+        .then(res => {
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            return res.json();
+        })
+        .then(data => {
+            if (!data.grid || !data.entities) throw new Error("Invalid map format");
 
+            grid = data.grid;
+            entityLayer = [];
+
+            for (const entityData of data.entities) {
+                const entity = instantiateEntity(entityData);
+                if (entity) entityLayer.push(entity);
+            }
+
+            log(1, `Map loaded: ${filename}`);
+            log(1, `Grid: ${grid[0].length}x${grid.length}, Entities: ${entityLayer.length}`);
+
+            if (!spawnPlayer(gameState.player)) {
+                log(3, "No spawn point found in map!");
+                drawErrorScreen("No START tile found in map.");
+                return;
+            }
+
+            log(1, `Player spawned at (${gameState.player.row}, ${gameState.player.col})`);
+            requestAnimationFrame(gameLoop);
+        })
+        .catch(err => {
+            log(3, `Failed to load map: ${err.message}`);
+            drawErrorScreen(`Could not load map.json\n${err.message}`);
+        });
+}
+
+function startGame() {
+    gameState.player = new Player("green");
+    loadMap("../maps/map.json");
+}
+
+function gameLoop(now) {
+    // 1. UPDATE
+    if (!gameState.inDebugMode) Enemy.tick(now, gameState.player);
+
+    // 2. RENDER
+    r.clear();
+    drawMap();
+    if (gameState.inDebugMode) r.drawGrid("#404040");
     drawEntityLayer(entityLayer);
     if (gameState.player) drawEntity(gameState.player);
     drawHUD();
 
+    // 3. OVERLAY SCREENS
     if (gameState.gameOver) { drawGameOverScreen(); return; }
     if (gameState.playerWon) { drawVictoryScreen(); return; }
-
     if (gameState.isInventoryOpen) { drawInventory(); requestAnimationFrame(gameLoop); return; }
     if (gameState.isPaused) { drawPauseScreen(); requestAnimationFrame(gameLoop); return; }
-
     if (gameState.isInCombat && gameState.currentEnemy) drawCombatScreen(gameState.player, gameState.currentEnemy);
     if (gameState.showInfo) drawInfoScreen();
 
@@ -621,45 +627,8 @@ window.addEventListener("keydown", (event) => {
 // ==================================================
 //  Initialization
 // ==================================================
-function loadMap(filename) {
-    fetch(filename)
-        .then(res => {
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            return res.json();
-        })
-        .then(data => {
-            if (!data.grid || !data.entities) throw new Error("Invalid map format");
 
-            grid = data.grid;
-            entityLayer = [];
-
-            for (const entityData of data.entities) {
-                const entity = instantiateEntity(entityData);
-                if (entity) entityLayer.push(entity);
-            }
-
-            log(1, `Map loaded: ${filename}`);
-            log(1, `Grid: ${grid[0].length}x${grid.length}, Entities: ${entityLayer.length}`);
-
-            if (!spawnPlayer(gameState.player)) {
-                log(3, "No spawn point found in map!");
-                drawErrorScreen("No START tile found in map.");
-                return;
-            }
-
-            log(1, `Player spawned at (${gameState.player.row}, ${gameState.player.col})`);
-            requestAnimationFrame(gameLoop);
-        })
-        .catch(err => {
-            log(3, `Failed to load map: ${err.message}`);
-            drawErrorScreen(`Could not load map.json\n${err.message}`);
-        });
-}
-
-function startGame() {
-    gameState.player = new Player("green");
-    loadMap("../maps/map.json");
-}
+// Start
 
 // DOM & Canvas setup
 const appContainer = getById("root");
@@ -669,10 +638,9 @@ const canvasWidth = 16 * factor;
 const canvasHeight = 9 * factor;
 
 const gameCanvas = getById("game");
-const ctx = gameCanvas.get2d();
-gameCanvas.setSize(canvasWidth, canvasHeight);
-
-// Start
+//const ctx = gameCanvas.get2d();
+//gameCanvas.setSize(canvasWidth, canvasHeight);
+const r = new Renderer(gameCanvas, canvasWidth, canvasHeight)
 window.onload = () => {
     startGame();
-};
+}

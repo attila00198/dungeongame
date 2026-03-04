@@ -208,6 +208,7 @@ function select(...children) {
     node.setName = function (name) { this.setAttr({ name }); return this; }
     node.setValue = function (value) { this.value = value; return this; }
     node.onChange = function (callback) { this.addEventListener("change", callback); return this }
+    node.onInput = function (callback) { this.addEventListener("input", callback); return this }
     node.setDisabled = function (disabled = true) { this.disabled = disabled; return this }
     node.setRequired = function (required = true) { this.required = required; return this }
 

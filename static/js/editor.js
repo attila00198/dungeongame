@@ -25,6 +25,10 @@ const ENTITY_META = [
             { key: "health", label: "HP", inputType: "number", default: 30 },
             { key: "atk", label: "ATK", inputType: "number", default: 10 },
             { key: "def", label: "DEF", inputType: "number", default: 5 },
+            {
+                key: "initialState", label: "Behavior", inputType: "select", default: "doIdle",
+                options: ["doIdle"]
+            },
         ]
     },
     {
@@ -420,17 +424,32 @@ function renderEntityEditor(entity) {
         .filter(f => f.key !== "contents")
         .map(f => {
             const fieldId = `field-${f.key}`;
-            const inp = input(f.inputType)
-                .setId(fieldId)
-                .setValue(entity[f.key] ?? f.default);
 
-            inp.onInput(() => {
-                const idx = entities.indexOf(entity);
-                if (idx === -1) return;
-                const val = f.inputType === "number" ? Number(inp.value) : inp.value;
-                entities[idx][f.key] = val;
-                drawMap();
-            });
+            const inp = f.inputType === "select"
+                ? (() => {
+                    const sel = select(
+                        ...f.options.map(o => option(o, o, (entity[f.key] ?? f.default) === o))
+                    ).setName(f.key);
+                    sel.onInput(() => {
+                        const idx = entities.indexOf(entity);
+                        if (idx === -1) return;
+                        entities[idx][f.key] = sel.value;
+                    });
+                    return sel;
+                })()
+                : input(f.inputType)
+                    .setId(fieldId)
+                    .setValue(entity[f.key] ?? f.default);
+
+            if (f.inputType !== "select") {
+                inp.onInput(() => {
+                    const idx = entities.indexOf(entity);
+                    if (idx === -1) return;
+                    const val = f.inputType === "number" ? Number(inp.value) : inp.value;
+                    entities[idx][f.key] = val;
+                    drawMap();
+                });
+            }
 
             return div(
                 label(f.label).setTarget(fieldId),
