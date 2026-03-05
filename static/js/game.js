@@ -33,6 +33,7 @@ const gameState = {
     inDebugMode: false,
     isPaused: false,
     isInventoryOpen: false,
+    inventorySelectedIndex: 0,
     isInCombat: false,
     currentEnemy: null,
     combatTurn: "",
@@ -89,7 +90,6 @@ function hasLineOfSight(entity, player) {
         let exactCol = x1 + dx * t;
         let exactRow = y1 + dy * t;
 
-        // Mindkét szomszédos cellát ellenőrizzük átlós sugárnál
         const cellsToCheck = [
             { r: Math.floor(exactRow), c: Math.floor(exactCol) },
             { r: Math.ceil(exactRow), c: Math.ceil(exactCol) },
@@ -108,7 +108,7 @@ function hasLineOfSight(entity, player) {
     return true;
 }
 
-function getRandomWalkablePos(minDistanceFrom, minDist = 3) {
+function getRandomWalkablePosition(minDistanceFrom, minDist = 3) {
     let attempts = 0;
     while (attempts < 1000) {
         let row = Math.floor(Math.random() * GRID_HEIGHT);
@@ -227,12 +227,10 @@ function drawHUD() {
     const textY = hudY + padding + 7;
     let currentX = padding;
 
-    // HP
     r.drawRect(currentX, hudY + padding - 4, iconSize, iconSize - 16, "#ff4444");
     r.drawText(`${gameState.player.health}/100`, currentX + iconSize + 8, textY, "bold 14px", "white", "left", "Courier New");
     currentX += iconSize + 70;
 
-    // ATK
     r.drawTriangle(
         currentX + iconSize / 2, hudY + padding - 4,
         currentX + iconSize - 4, hudY + hudHeight - padding,
@@ -242,31 +240,26 @@ function drawHUD() {
     r.drawText(`${gameState.player.atk}`, currentX + iconSize + 8, textY, "14px", "white", "left", "Courier New");
     currentX += iconSize + 50;
 
-    // DEF
     r.drawCircle(currentX + iconSize / 2, hudY + hudHeight / 2, iconSize / 2 - 4, "#4488ff");
     r.drawText(`${gameState.player.def}`, currentX + iconSize + 8, textY, "14px", "white", "left", "Courier New");
     currentX += iconSize + 70;
 
-    // Divider
     r.drawLine(currentX, hudY + padding, currentX, hudY + hudHeight - padding, "#444444", 2);
     currentX += 20;
 
-    // Enemies remaining
     const enemiesLeft = entityLayer.filter(e => e instanceof Enemy).length;
     r.drawRect(currentX, hudY + padding - 4, iconSize - 8, iconSize - 8, "#ff4444");
     r.drawText(`Enemies: ${enemiesLeft}`, currentX + iconSize + 8, textY, "14px", "white", "left", "Courier New");
     currentX += iconSize + 130;
 
-    // Keys
     const keyCount = gameState.player.inventory.filter(item =>
-        item.toLowerCase().includes("key")
+        item.name.toLowerCase().includes("key")
     ).length;
     r.drawRect(currentX + 4, hudY + padding - 4, iconSize - 16, iconSize - 16, "#ffdd44");
     r.drawRect(currentX + iconSize - 12, hudY + padding + 2, 8, iconSize - 26, "#ffdd44");
     r.drawText(`Keys: ${keyCount}`, currentX + iconSize + 8, textY, "14px", "white", "left", "Courier New");
     currentX += iconSize + 100;
 
-    // Gold
     r.drawCircle(currentX + 10, hudY + hudHeight / 2, 9, "gold");
     r.drawText(`${gameState.player.gold} gold`, currentX + 26, textY, "14px", "white", "left", "Courier New");
 }
@@ -310,39 +303,85 @@ function drawCombatScreen(player, enemy) {
     r.drawText(gameState.combatLog, cx + swScaled / 2, cy + shScaled - 40, "italic 16px", "gold");
 }
 
-function drawInventory() {
-    let swScaled = canvasWidth * 0.4;
-    let shScaled = canvasHeight * 0.6;
-    let cx = (canvasWidth - swScaled) / 2;
-    let cy = (canvasHeight - shScaled) / 2;
+function drawInventory(renderer) {
+    const cw = r.canvas.width;
+    const ch = r.canvas.height;
 
-    r.drawRect(cx, cy, swScaled, shScaled, "#1a1a1a");
-    r.drawFrame(cx, cy, swScaled, shScaled, 15, "gold", 3);
-    r.drawText("INVENTORY", cx + swScaled / 2, cy + 40, "bold 24px", "gold");
-    r.drawLine(cx + 30, cy + 55, cx + swScaled - 30, cy + 55, "#444444", 2);
+    const w = cw * 0.4;
+    const h = ch * 0.6;
+    const cx = (cw - w) / 2;
+    const cy = (ch - h) / 2;
 
-    let startY = cy + 85;
-    r.drawText(`Gold: ${gameState.player.gold}`, cx + 30, startY, "18px", "#ffd700", "left");
+    const pad = 30;
+    const inv = gameState.player.inventory;
+    const sel = gameState.inventorySelectedIndex;
 
-    startY += 40;
-    r.drawText("Keys:", cx + 30, startY, "bold 18px", "white", "left");
+    // Háttér + keret
+    r.drawRect(cx, cy, w, h, "#1a1a1a");
+    r.drawFrame(cx, cy, w, h, 15, "gold", 3);
 
-    if (gameState.player.inventory.length === 0) {
-        r.drawText("(none)", cx + 50, startY + 30, "16px", "#888", "left");
+    // Cím
+    r.drawText("INVENTORY", cx + w / 2, cy + 42, "bold 22px", "gold", "center", "Courier New");
+
+    // Elválasztó vonal
+    r.drawLine(cx + pad, cy + 55, cx + w - pad, cy + 55, "#444", 2);
+
+    // Arany
+    r.drawCircle(cx + pad + 8, cy + 82, 8, "gold");
+    r.drawText(`${gameState.player.gold} gold`, cx + pad + 24, cy + 87, "15px", "#ffd700", "left", "Courier New");
+
+    // Elválasztó vonal
+    r.drawLine(cx + pad, cy + 100, cx + w - pad, cy + 100, "#333", 1);
+
+    // Item lista
+    if (inv.length === 0) {
+        r.drawText("(empty)", cx + w / 2, cy + 140, "13px", "#555", "center", "Courier New");
     } else {
-        let keyY = startY + 30;
-        for (let item of gameState.player.inventory) {
-            let iconColor = "magenta";
-            if (item.includes("Gold")) iconColor = "gold";
-            if (item.includes("Silver")) iconColor = "silver";
-            if (item.includes("Red")) iconColor = "red";
-            r.drawRect(cx + 50, keyY - 12, 16, 16, iconColor);
-            r.drawText(item, cx + 75, keyY, "16px", "white", "left");
-            keyY += 30;
-        }
+        const itemStartY = cy + 118;
+        const rowH = 34;
+
+        inv.forEach((item, i) => {
+            const rowY = itemStartY + i * rowH;
+            const isSelected = i === sel;
+
+            // Kijelölés háttér
+            if (isSelected) {
+                r.drawRect(cx + pad - 6, rowY - 2, w - pad * 2 + 12, rowH - 4, "rgba(255,200,50,0.1)");
+                r.drawFrame(cx + pad - 6, rowY - 2, w - pad * 2 + 12, rowH - 4, 0, "rgba(255,200,50,0.5)", 1);
+            }
+
+            // Ikon
+            const iconX = cx + pad + 8;
+            const iconY = rowY + rowH / 2 - 6;
+            if (item instanceof Potion) {
+                r.drawCircle(iconX, iconY + 6, 7, isSelected ? "#cc66ff" : "#7a3a99");
+            } else if (item instanceof Key) {
+                r.drawRect(iconX - 6, iconY, 12, 12, item.color ?? "gold");
+            } else {
+                r.drawRect(iconX - 6, iconY, 12, 12, "#888");
+            }
+
+            // Item neve
+            const labelX = cx + pad + 22;
+            const labelY = rowY + rowH / 2 + 2;
+            const label = item instanceof Potion
+                ? `${item.name}  (+${item.healAmount} HP)`
+                : (item.name ?? String(item));
+
+            r.drawText(label, labelX, labelY, "13px",
+                isSelected ? "gold" : "#ccc", "left", "Courier New");
+
+            // [E] use hint
+            if (isSelected) {
+                r.drawText("[E]", cx + w - pad, labelY, "11px", "#888", "right", "Courier New");
+            }
+        });
     }
 
-    r.drawText("Press [I] to close", cx + swScaled / 2, cy + shScaled - 25, "14px", "#888");
+    // Lábléc
+    r.drawLine(cx + pad, cy + h - 40, cx + w - pad, cy + h - 40, "#333", 1);
+    r.drawText("W/S  Navigate     E  Use     I  Close",
+        cx + w / 2, cy + h - 18, "11px", "#555", "center", "Courier New");
 }
 
 function drawPauseScreen() {
@@ -486,7 +525,7 @@ function spawnEntity(entity) {
 }
 
 function spawnEntityRandom(entity, minDistanceFrom) {
-    let pos = getRandomWalkablePos(minDistanceFrom, 3);
+    let pos = getRandomWalkablePosition(minDistanceFrom, 3);
     if (pos.success) {
         entity.row = pos.row;
         entity.col = pos.col;
@@ -522,44 +561,42 @@ function instantiateEntity(data) {
 // ==================================================
 //  Game Loop
 // ==================================================
-function loadMap(filename) {
-    fetch(filename)
-        .then(res => {
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            return res.json();
-        })
-        .then(data => {
-            if (!data.grid || !data.entities) throw new Error("Invalid map format");
+async function loadMap(filename) {
+    try {
+        const res = await fetch(filename);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
-            grid = data.grid;
-            entityLayer = [];
+        const data = await res.json();
+        if (!data.grid || !data.entities)
+            throw new Error("Invalid map format");
 
-            for (const entityData of data.entities) {
-                const entity = instantiateEntity(entityData);
-                if (entity) entityLayer.push(entity);
-            }
+        grid = data.grid;
+        entityLayer = [];
 
-            log(1, `Map loaded: ${filename}`);
-            log(1, `Grid: ${grid[0].length}x${grid.length}, Entities: ${entityLayer.length}`);
+        for (const entityData of data.entities) {
+            const entity = instantiateEntity(entityData);
+            if (entity) entityLayer.push(entity);
+        }
 
-            if (!spawnPlayer(gameState.player)) {
-                log(3, "No spawn point found in map!");
-                drawErrorScreen("No START tile found in map.");
-                return;
-            }
-
-            log(1, `Player spawned at (${gameState.player.row}, ${gameState.player.col})`);
-            requestAnimationFrame(gameLoop);
-        })
-        .catch(err => {
-            log(3, `Failed to load map: ${err.message}`);
-            drawErrorScreen(`Could not load map.json\n${err.message}`);
-        });
+        log(1, `Map loaded: ${filename}`);
+        log(1, `Grid: ${grid[0].length}x${grid.length}, Entities: ${entityLayer.length}`);
+    } catch (err) {
+        log(3, `Failed to load map: ${err.message}`);
+        drawErrorScreen(`Could not load map.json\n${err.message}`);
+        throw err; // ← fontos, hogy startGame is tudja
+    }
 }
 
-function startGame() {
+async function startGame() {
     gameState.player = new Player("green");
-    loadMap("../maps/map.json");
+    await loadMap("../maps/map.json");
+    if (!spawnPlayer(gameState.player)) {
+        log(3, "No spawn point found in map!");
+        drawErrorScreen("No START tile found in map.");
+        return;
+    }
+    log(1, `Player spawned at (${gameState.player.row}, ${gameState.player.col})`);
+    requestAnimationFrame(gameLoop);
 }
 
 function gameLoop(now) {
@@ -591,8 +628,27 @@ function gameLoop(now) {
 window.addEventListener("keydown", (event) => {
     if (event.repeat) return;
 
-    if (event.key === "i" || event.key === "I") { toggleInventory(); return; }
-    if (gameState.isInventoryOpen) return;
+    if (event.key === "i" || event.key === "I") toggleInventory()
+    if (gameState.isInventoryOpen) {
+        const inv = gameState.player.inventory;
+        console.log(inv)
+        if (event.key === "w" || event.key === "ArrowUp") {
+            gameState.inventorySelectedIndex = (gameState.inventorySelectedIndex - 1 + inv.length) % inv.length;
+        }
+        if (event.key === "s" || event.key === "ArrowDown") {
+            gameState.inventorySelectedIndex = (gameState.inventorySelectedIndex + 1 + inv.length) % inv.length;
+        }
+
+        if (event.key === "Enter" || event.key === "e") {
+            const selected = inv[gameState.inventorySelectedIndex];
+            if (selected && typeof selected.onUse === "function") {
+                selected.onUse(gameState.player)
+                inv.splice(gameState.inventorySelectedIndex, 1)
+                gameState.inventorySelectedIndex = Math.min(gameState.inventorySelectedIndex, inv.length - 1);
+            }
+        }
+        return;
+    }
 
     if (event.key === "p" || event.key === "P" || event.key === "Escape") { togglePause(); return; }
     if (gameState.isPaused) return;

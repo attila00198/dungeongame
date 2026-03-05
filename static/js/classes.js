@@ -225,7 +225,7 @@ class Key extends Item {
         super(name, row, col, color, 15);
     }
     onPickup(player) {
-        player.inventory.push(this.name);
+        player.inventory.push(this);
         showInfoMessage(`Picked up: ${this.name}`);
         console.log(`[PICKUP] ${player.constructor.name} collected ${this.name}`);
     }
@@ -236,13 +236,20 @@ class Potion extends Item {
         this.healAmount = healAmount;
     }
     onPickup(player) {
-        if (player.health === 100)
-            return;
-        let oldHealth = player.health;
+        player.inventory.push(this);
+        showInfoMessage(`You picked up: ${this.name}`);
+        console.log(`[PICKUP] ${player.constructor.name} collected ${this.name}`);
+    }
+
+    onUse(player) {
+        if (player.health >= 100) {
+            showInfoMessage("You are already at max HP.", 15);
+            return false
+        }
+        const currentHealth = player.health
         player.health = Math.min(player.health + this.healAmount, 100);
-        let actualHeal = player.health - oldHealth;
-        showInfoMessage(`+${actualHeal} HP (${this.name})`);
-        console.log(`[PICKUP] Healed ${actualHeal} HP`);
+        showInfoMessage(`Used ${this.name}: +${player.health - currentHealth} HP`);
+        return true;
     }
 }
 class Gold extends Item {
@@ -269,13 +276,11 @@ class Door extends Structure {
         this.isOpen = false;
     }
     canOpen(player) {
-        if (this.isOpen)
-            return true;
-        // No key required - always openable
-        if (this.requiredKey === null)
-            return true;
-        // Key required - check inventory
-        return player.inventory && player.inventory.includes(this.requiredKey);
+        if(this.isOpen) return true;
+        if(this.requiredKey === null) return true;
+        return player.inventory.some(
+            item => item instanceof Key && item.name === this.requiredKey
+        );
     }
     open() {
         this.isOpen = true;
