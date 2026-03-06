@@ -22,7 +22,7 @@ class Actor extends GameObject {
     takeDamage(rawDamage) {
         let actualDamage = Math.max(1, rawDamage - this.def);
         this.health -= actualDamage;
-        if(this.health < 0) this.health = 0;
+        if (this.health < 0) this.health = 0;
         this.flashFrames = 30;
         return actualDamage;
     }
@@ -70,11 +70,7 @@ class Player extends Actor {
             }
             // Door collision -> nyitás vagy blokkolás
             if (collision instanceof Door) {
-                if (collision.isOpen) {
-                    // Door already open, just pass through
-                    // No message needed
-                }
-                else if (collision.canOpen(this)) {
+                if (collision.canOpen(this)) {
                     collision.open();
                     if (collision.requiredKey) {
                         showInfoMessage(`Door opened with ${collision.requiredKey}`);
@@ -277,8 +273,8 @@ class Door extends Structure {
         this.isOpen = false;
     }
     canOpen(player) {
-        if(this.isOpen) return true;
-        if(this.requiredKey === null) return true;
+        if (this.isOpen) return true;
+        if (this.requiredKey === null) return true;
         return player.inventory.some(
             item => item instanceof Key && item.name === this.requiredKey
         );
