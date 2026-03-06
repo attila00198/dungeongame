@@ -22,6 +22,7 @@ class Actor extends GameObject {
     takeDamage(rawDamage) {
         let actualDamage = Math.max(1, rawDamage - this.def);
         this.health -= actualDamage;
+        if(this.health < 0) this.health = 0;
         this.flashFrames = 30;
         return actualDamage;
     }

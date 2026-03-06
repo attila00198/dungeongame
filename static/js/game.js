@@ -491,6 +491,8 @@ function handleCombatAction() {
 
 function toggleInventory() {
     gameState.isInventoryOpen = !gameState.isInventoryOpen;
+    // FIX 2: pause/unpause the game together with the inventory
+    gameState.isPaused = gameState.isInventoryOpen;
 }
 
 function togglePause() {
@@ -628,7 +630,12 @@ function gameLoop(now) {
 window.addEventListener("keydown", (event) => {
     if (event.repeat) return;
 
-    if (event.key === "i" || event.key === "I") toggleInventory()
+    // FIX 1: block inventory during combat
+    if (event.key === "i" || event.key === "I") {
+        if (gameState.isInCombat) return;
+        toggleInventory();
+    }
+
     if (gameState.isInventoryOpen) {
         const inv = gameState.player.inventory;
         console.log(inv)
