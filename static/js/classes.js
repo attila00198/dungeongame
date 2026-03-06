@@ -199,10 +199,7 @@ class Enemy extends Actor {
             this.lastKnownPlayerRow = player.row;
             this.lastKnownPlayerCol = player.col;
             this.trigger("seesPlayer");
-        } else if (this.state === "doChase") {
-            this.trigger("losesPlayer");
         }
-
         this[this.state](player);
     }
 }
