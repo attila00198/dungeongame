@@ -36,85 +36,6 @@ class Player extends Actor {
         this.gold = 0;
         this.inventory = [];
     }
-    move(direction, gameState) {
-        let newRow = this.row;
-        let newCol = this.col;
-        // Számold ki az új pozíciót
-        switch (direction) {
-            case "up":
-                newRow--;
-                break;
-            case "down":
-                newRow++;
-                break;
-            case "left":
-                newCol--;
-                break;
-            case "right":
-                newCol++;
-                break;
-            default:
-                console.error("[ERROR]: Unknown direction.");
-                return { moved: false, reason: "invalid_direction" };
-        }
-        // 1. TILE VALIDÁLÁS (fal, bounds)
-        if (!isValidPosition(newRow, newCol)) {
-            return { moved: false, reason: "blocked_tile" };
-        }
-        // 2. ENTITY COLLISION
-        let collision = getEntityAt(newRow, newCol, entityLayer);
-        if (collision) {
-            // Enemy collision -> harc
-            if (collision instanceof Enemy) {
-                return { moved: false, reason: "collision", entity: collision };
-            }
-            // Door collision -> nyitás vagy blokkolás
-            if (collision instanceof Door) {
-                if (collision.canOpen(this)) {
-                    collision.open();
-                    if (collision.requiredKey) {
-                        showInfoMessage(`Door opened with ${collision.requiredKey}`);
-                    }
-                    else {
-                        showInfoMessage(`Door opened`);
-                    }
-                }
-                else {
-                    showInfoMessage(`Locked! Need: ${collision.requiredKey}`);
-                    return { moved: false, reason: "locked_door", entity: collision };
-                }
-            }
-            // Item collision -> felvétel
-            if (collision instanceof Item) {
-                collision.onPickup(this);
-                // Töröld az entityLayer-ből
-                let index = entityLayer.indexOf(collision);
-                if (index > -1) {
-                    entityLayer.splice(index, 1);
-                    console.log(`[PICKUP] Removed ${collision.name} from entityLayer`);
-                }
-            }
-            // Chest collision
-            if (collision instanceof Chest) {
-                collision.open(this);
-                return { moved: false, reason: "chest" };
-            }
-            // Structure collision (egyéb blokkoló)
-            if (collision instanceof Structure && !(collision instanceof Door)) {
-                return { moved: false, reason: "blocked_structure", entity: collision };
-            }
-        }
-        // 3. Minden OK, mozoghat
-        this.row = newRow;
-        this.col = newCol;
-        // 4. Exit check
-        const tile = TILE_BY_ID[getTileTypeAt(newRow, newCol)];
-        if (tile === TILE_T.EXIT) gameState.playerWon = true;
-        return { moved: true };
-    }
-    openInventory() {
-        console.log(this.inventory);
-    }
 }
 class Enemy extends Actor {
     static MOVE_INTERVAL = 400;
@@ -147,37 +68,16 @@ class Enemy extends Actor {
     doIdle() { }
 
     doChase(player) {
-        const dr = Math.abs(this.row - player.row);
-        const dc = Math.abs(this.col - player.col);
-
-        // Szomszédos -> harcot kezdeményez
-        if (dr + dc === 1) {
-            if (!gameState.isInCombat) {
-                gameState.isInCombat = true;
-                gameState.currentEnemy = this;
-                gameState.combatTurn = "player";
-                gameState.combatLog = `${this.name} támad! Nyomj SPACE-t!`;
-            }
-            return;
-        }
-
-        // BFS lépés az utolsó ismert pozíció felé
         const targetRow = this.lastKnownPlayerRow ?? player.row;
         const targetCol = this.lastKnownPlayerCol ?? player.col;
         const next = bfsNextStep(this.row, this.col, targetRow, targetCol);
 
         if (next) {
-            const blocker = getEntityAt(next.row, next.col, entityLayer);
-            const canStep = !blocker
-                || blocker instanceof Player
-                || (blocker instanceof Door && blocker.isOpen);
-            if (canStep) {
-                this.row = next.row;
-                this.col = next.col;
-            }
+            const dr = next.row > this.row ? "down" : next.row < this.row ? "up" : null;
+            const dc = next.col > this.col ? "right" : next.col < this.col ? "left" : null;
+            move(this, dr ?? dc, gameState);
         }
 
-        // Elérte az utolsó ismert pozíciót, és a játékos már nincs ott
         const atLastKnown =
             this.row === this.lastKnownPlayerRow &&
             this.col === this.lastKnownPlayerCol;
@@ -199,7 +99,10 @@ class Enemy extends Actor {
             this.lastKnownPlayerRow = player.row;
             this.lastKnownPlayerCol = player.col;
             this.trigger("seesPlayer");
+        } else if (this.state === "doChase") {
+            this.trigger("losesPlayer");
         }
+
         this[this.state](player);
     }
 }
@@ -238,9 +141,9 @@ class Potion extends Item {
     onUse(player) {
         if (player.health >= 100) {
             showInfoMessage("You are already at max HP.", 15);
-            return false
+            return false;
         }
-        const currentHealth = player.health
+        const currentHealth = player.health;
         player.health = Math.min(player.health + this.healAmount, 100);
         showInfoMessage(`Used ${this.name}: +${player.health - currentHealth} HP`);
         return true;
@@ -266,7 +169,7 @@ class Structure extends GameObject {
 class Door extends Structure {
     constructor(row, col, requiredKey = null, color = "brown") {
         super(row, col, color, 15);
-        this.requiredKey = requiredKey; // null = no key required
+        this.requiredKey = requiredKey;
         this.isOpen = false;
     }
     canOpen(player) {
@@ -278,11 +181,10 @@ class Door extends Structure {
     }
     open() {
         this.isOpen = true;
-        this.color = "#333333"; // Darker when open
+        this.color = "#333333";
         if (this.requiredKey) {
             console.log(`[DOOR] Opened with ${this.requiredKey}`);
-        }
-        else {
+        } else {
             console.log(`[DOOR] Opened (no key required)`);
         }
     }
@@ -307,13 +209,11 @@ class Chest extends GameObject {
                 player.gold += item.amount;
                 itemNames.push(`${item.amount} gold`);
                 console.log(`[CHEST] Found ${item.amount} gold`);
-            }
-            else if (item instanceof Key) {
+            } else if (item instanceof Key) {
                 player.inventory.push(item.name);
                 itemNames.push(item.name);
                 console.log(`[CHEST] Found ${item.name}`);
-            }
-            else if (item instanceof Potion) {
+            } else if (item instanceof Potion) {
                 item.onPickup(player);
                 itemNames.push(item.name);
                 console.log(`[CHEST] Found ${item.name}`);
@@ -326,15 +226,15 @@ class Chest extends GameObject {
 
 class Renderer {
     constructor(canvas, width, height) {
-        this.canvas = canvas
-        this.canvas.setSize(width, height)
-        this.ctx = canvas.get2d()
-        this.cellSize = 20
+        this.canvas = canvas;
+        this.canvas.setSize(width, height);
+        this.ctx = canvas.get2d();
+        this.cellSize = 20;
     }
 
     clear(color = "black") {
-        this.ctx.fillStyle = color
-        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height)
+        this.ctx.fillStyle = color;
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
     }
 
     drawRect(x, y, w, h, color) {

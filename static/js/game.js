@@ -96,7 +96,7 @@ function hasLineOfSight(entity, player) {
         ];
 
         for (const { r, c } of cellsToCheck) {
-            if (r === y2 && c === x2) return true; // célnál vagyunk
+            if (r === y2 && c === x2) return true;
             if (!grid[r] || grid[r][c] === undefined) continue;
             const tile = TILE_BY_ID[grid[r][c]];
             if (tile === TILE_T.WALL) return false;
@@ -153,27 +153,19 @@ function bfsNextStep(fromRow, fromCol, toRow, toCol) {
             const nr = row + dr;
             const nc = col + dc;
             const key = `${nr},${nc}`;
-            let tile = TILE_BY_ID[grid[nr][nc]];
-
 
             if (visited.has(key)) continue;
             visited.add(key);
 
-            // Cél elérve
             if (nr === toRow && nc === toCol) {
                 const fullPath = [...path, { row: nr, col: nc }];
-                return fullPath[0]; // következő lépés
+                return fullPath[0];
             }
 
-            // Csak járható tile-on mehet át (de a célnál nem ellenőrizzük — ott van az entitás)
             if (!grid[nr]) continue;
-            tile = TILE_BY_ID[grid[nr][nc]];
+            const tile = TILE_BY_ID[grid[nr][nc]];
             if (!tile?.isWalkable) continue;
 
-            // Ne menjen olyan mezőre ahol másik enemy áll (kivéve a cél)
-            if (!grid[nr]) continue;
-            tile = TILE_BY_ID[grid[nr][nc]];
-            if (!tile?.isWalkable) continue;
             const occupant = getEntityAt(nr, nc, entityLayer);
             if (occupant instanceof Door && !occupant.isOpen) continue;
 
@@ -181,19 +173,114 @@ function bfsNextStep(fromRow, fromCol, toRow, toCol) {
         }
     }
 
-    return null; // nincs elérhető út
+    return null;
+}
+
+// ==================================================
+//  Movement
+// ==================================================
+function move(entity, direction, gameState) {
+    let newRow = entity.row;
+    let newCol = entity.col;
+
+    switch (direction) {
+        case "up":    newRow--; break;
+        case "down":  newRow++; break;
+        case "left":  newCol--; break;
+        case "right": newCol++; break;
+        default:
+            return { moved: false, reason: "invalid_direction" };
+    }
+
+    if (!isValidPosition(newRow, newCol)) {
+        return { moved: false, reason: "blocked_tile" };
+    }
+
+    const target = getEntityAt(newRow, newCol, entityLayer);
+    if (target) {
+        const allowMove = handleCollision(entity, target, gameState);
+        if (!allowMove) return { moved: false, reason: "collision", entity: target };
+    }
+
+    entity.row = newRow;
+    entity.col = newCol;
+
+    const tile = TILE_BY_ID[getTileTypeAt(newRow, newCol)];
+    if (tile === TILE_T.EXIT) gameState.playerWon = true;
+
+    return { moved: true };
+}
+
+// ==================================================
+//  Collision
+// ==================================================
+function startCombat(enemy) {
+    if (gameState.isInCombat) return;
+    gameState.isInCombat = true;
+    gameState.currentEnemy = enemy;
+    gameState.combatTurn = "player";
+    gameState.combatLog = `Engaged ${enemy.name}! Press SPACE!`;
+    log(1, `[COMBAT] Started with ${enemy.name}`);
+}
+
+function handlePlayerCollision(player, target) {
+    if (target instanceof Enemy) {
+        startCombat(target);
+        return false;
+    }
+    if (target instanceof Door) {
+        if (target.canOpen(player)) {
+            target.open();
+            showInfoMessage(target.requiredKey
+                ? `Door opened with ${target.requiredKey}`
+                : "Door opened"
+            );
+            return true; // ajtó kinyílt, játékos beléphet
+        } else {
+            showInfoMessage(`Locked! Need: ${target.requiredKey}`);
+            return false;
+        }
+    }
+    if (target instanceof Item) {
+        target.onPickup(player);
+        const index = entityLayer.indexOf(target);
+        if (index > -1) entityLayer.splice(index, 1);
+        return true; // item felvéve, játékos ráléphet a cellára
+    }
+    if (target instanceof Chest) {
+        target.open(player);
+        return false;
+    }
+    return false;
+}
+
+function handleEnemyCollision(enemy, target) {
+    if (target instanceof Player) {
+        startCombat(enemy);
+        return false;
+    }
+    return false;
+}
+
+function handleCollision(entity, target, gameState) {
+    if (entity instanceof Player) {
+        return handlePlayerCollision(entity, target);
+    } else if (entity instanceof Enemy) {
+        return handleEnemyCollision(entity, target);
+    }
+    return false;
 }
 
 // ==================================================
 //  Rendering Functions
 // ==================================================
 function drawEntityLayer(entityList) {
-    // Pass 1: structures (Door, Chest, stb.) — mindig alul
     for (let e of entityList) {
+        if (e instanceof Player) continue;
         if (e instanceof Structure) drawEntity(e);
     }
-    // Pass 2: mozgó entitások — felül
     for (let e of entityList) {
+        if (e instanceof Player) continue;
         if (e instanceof Structure) continue;
         if (gameState.player != null && hasLineOfSight(e, gameState.player)) {
             drawEntity(e);
@@ -303,7 +390,7 @@ function drawCombatScreen(player, enemy) {
     r.drawText(gameState.combatLog, cx + swScaled / 2, cy + shScaled - 40, "italic 16px", "gold");
 }
 
-function drawInventory(renderer) {
+function drawInventory() {
     const cw = r.canvas.width;
     const ch = r.canvas.height;
 
@@ -316,24 +403,16 @@ function drawInventory(renderer) {
     const inv = gameState.player.inventory;
     const sel = gameState.inventorySelectedIndex;
 
-    // Háttér + keret
     r.drawRect(cx, cy, w, h, "#1a1a1a");
     r.drawFrame(cx, cy, w, h, 15, "gold", 3);
 
-    // Cím
     r.drawText("INVENTORY", cx + w / 2, cy + 42, "bold 22px", "gold", "center", "Courier New");
-
-    // Elválasztó vonal
     r.drawLine(cx + pad, cy + 55, cx + w - pad, cy + 55, "#444", 2);
 
-    // Arany
     r.drawCircle(cx + pad + 8, cy + 82, 8, "gold");
     r.drawText(`${gameState.player.gold} gold`, cx + pad + 24, cy + 87, "15px", "#ffd700", "left", "Courier New");
-
-    // Elválasztó vonal
     r.drawLine(cx + pad, cy + 100, cx + w - pad, cy + 100, "#333", 1);
 
-    // Item lista
     if (inv.length === 0) {
         r.drawText("(empty)", cx + w / 2, cy + 140, "13px", "#555", "center", "Courier New");
     } else {
@@ -344,13 +423,11 @@ function drawInventory(renderer) {
             const rowY = itemStartY + i * rowH;
             const isSelected = i === sel;
 
-            // Kijelölés háttér
             if (isSelected) {
                 r.drawRect(cx + pad - 6, rowY - 2, w - pad * 2 + 12, rowH - 4, "rgba(255,200,50,0.1)");
                 r.drawFrame(cx + pad - 6, rowY - 2, w - pad * 2 + 12, rowH - 4, 0, "rgba(255,200,50,0.5)", 1);
             }
 
-            // Ikon
             const iconX = cx + pad + 8;
             const iconY = rowY + rowH / 2 - 6;
             if (item instanceof Potion) {
@@ -361,7 +438,6 @@ function drawInventory(renderer) {
                 r.drawRect(iconX - 6, iconY, 12, 12, "#888");
             }
 
-            // Item neve
             const labelX = cx + pad + 22;
             const labelY = rowY + rowH / 2 + 2;
             const label = item instanceof Potion
@@ -371,14 +447,12 @@ function drawInventory(renderer) {
             r.drawText(label, labelX, labelY, "13px",
                 isSelected ? "gold" : "#ccc", "left", "Courier New");
 
-            // [E] use hint
             if (isSelected) {
                 r.drawText("[E]", cx + w - pad, labelY, "11px", "#888", "right", "Courier New");
             }
         });
     }
 
-    // Lábléc
     r.drawLine(cx + pad, cy + h - 40, cx + w - pad, cy + h - 40, "#333", 1);
     r.drawText("W/S  Navigate     E  Use     I  Close",
         cx + w / 2, cy + h - 18, "11px", "#555", "center", "Courier New");
@@ -433,7 +507,7 @@ function drawMap() {
     for (let row = 0; row < grid.length; row++) {
         for (let col = 0; col < grid[row].length; col++) {
             const tile = TILE_BY_ID[grid[row][col]];
-            r.drawRect(col * TILE_SIZE, row * TILE_SIZE, TILE_SIZE, TILE_SIZE, tile.color)
+            r.drawRect(col * TILE_SIZE, row * TILE_SIZE, TILE_SIZE, TILE_SIZE, tile.color);
         }
     }
 }
@@ -491,7 +565,6 @@ function handleCombatAction() {
 
 function toggleInventory() {
     gameState.isInventoryOpen = !gameState.isInventoryOpen;
-    // FIX 2: pause/unpause the game together with the inventory
     gameState.isPaused = gameState.isInventoryOpen;
 }
 
@@ -513,28 +586,6 @@ function spawnPlayer(player) {
         }
     }
     console.error("[ERROR] No spawn point found!");
-    return false;
-}
-
-function spawnEntity(entity) {
-    let { row, col } = entity;
-    if (isValidPosition(row, col) && getEntityAt(row, col, entityLayer) === null) {
-        console.log(`[SPAWN] Entity spawned at (${row}, ${col})`);
-        return true;
-    }
-    console.error(`[ERROR] Cannot spawn at (${row}, ${col})`);
-    return false;
-}
-
-function spawnEntityRandom(entity, minDistanceFrom) {
-    let pos = getRandomWalkablePosition(minDistanceFrom, 3);
-    if (pos.success) {
-        entity.row = pos.row;
-        entity.col = pos.col;
-        console.log(`[SPAWN] Entity spawned at (${pos.row}, ${pos.col})`);
-        return true;
-    }
-    console.error("[ERROR] Could not find valid spawn position");
     return false;
 }
 
@@ -585,7 +636,7 @@ async function loadMap(filename) {
     } catch (err) {
         log(3, `Failed to load map: ${err.message}`);
         drawErrorScreen(`Could not load map.json\n${err.message}`);
-        throw err; // ← fontos, hogy startGame is tudja
+        throw err;
     }
 }
 
@@ -597,15 +648,14 @@ async function startGame() {
         drawErrorScreen("No START tile found in map.");
         return;
     }
+    entityLayer.push(gameState.player);
     log(1, `Player spawned at (${gameState.player.row}, ${gameState.player.col})`);
     requestAnimationFrame(gameLoop);
 }
 
 function gameLoop(now) {
-    // 1. UPDATE
     if (!gameState.inDebugMode) Enemy.tick(now, gameState.player);
 
-    // 2. RENDER
     r.clear();
     drawMap();
     if (gameState.inDebugMode) r.drawGrid("#404040");
@@ -613,7 +663,6 @@ function gameLoop(now) {
     if (gameState.player) drawEntity(gameState.player);
     drawHUD();
 
-    // 3. OVERLAY SCREENS
     if (gameState.gameOver) { drawGameOverScreen(); return; }
     if (gameState.playerWon) { drawVictoryScreen(); return; }
     if (gameState.isInventoryOpen) { drawInventory(); requestAnimationFrame(gameLoop); return; }
@@ -630,7 +679,6 @@ function gameLoop(now) {
 window.addEventListener("keydown", (event) => {
     if (event.repeat) return;
 
-    // FIX 1: block inventory during combat
     if (event.key === "i" || event.key === "I") {
         if (gameState.isInCombat) return;
         toggleInventory();
@@ -638,19 +686,17 @@ window.addEventListener("keydown", (event) => {
 
     if (gameState.isInventoryOpen) {
         const inv = gameState.player.inventory;
-        console.log(inv)
         if (event.key === "w" || event.key === "ArrowUp") {
             gameState.inventorySelectedIndex = (gameState.inventorySelectedIndex - 1 + inv.length) % inv.length;
         }
         if (event.key === "s" || event.key === "ArrowDown") {
             gameState.inventorySelectedIndex = (gameState.inventorySelectedIndex + 1 + inv.length) % inv.length;
         }
-
         if (event.key === "Enter" || event.key === "e") {
             const selected = inv[gameState.inventorySelectedIndex];
             if (selected && typeof selected.onUse === "function") {
-                selected.onUse(gameState.player)
-                inv.splice(gameState.inventorySelectedIndex, 1)
+                selected.onUse(gameState.player);
+                inv.splice(gameState.inventorySelectedIndex, 1);
                 gameState.inventorySelectedIndex = Math.min(gameState.inventorySelectedIndex, inv.length - 1);
             }
         }
@@ -676,24 +722,13 @@ window.addEventListener("keydown", (event) => {
     if (event.key === "d") direction = "right";
 
     if (direction) {
-        let result = gameState.player.move(direction, gameState);
-        if (result.reason === "collision" && result.entity instanceof Enemy) {
-            log(1, `Player collided with ${result.entity.name}`);
-            gameState.isInCombat = true;
-            gameState.currentEnemy = result.entity;
-            gameState.combatTurn = "player";
-            gameState.combatLog = `Engaged ${result.entity.name}! Press SPACE!`;
-        }
+        move(gameState.player, direction, gameState);
     }
 });
 
 // ==================================================
 //  Initialization
 // ==================================================
-
-// Start
-
-// DOM & Canvas setup
 const appContainer = getById("root");
 appContainer.appendChild(app());
 
@@ -701,9 +736,8 @@ const canvasWidth = 16 * factor;
 const canvasHeight = 9 * factor;
 
 const gameCanvas = getById("game");
-//const ctx = gameCanvas.get2d();
-//gameCanvas.setSize(canvasWidth, canvasHeight);
-const r = new Renderer(gameCanvas, canvasWidth, canvasHeight)
+const r = new Renderer(gameCanvas, canvasWidth, canvasHeight);
+
 window.onload = () => {
     startGame();
 }
