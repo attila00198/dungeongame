@@ -7,12 +7,12 @@ const GRID_WIDTH = 16 * factor / TILE_SIZE;
 const GRID_HEIGHT = 9 * factor / TILE_SIZE;
 
 const TILE_T = {
-    FLOOR: { id: 0, color: "#4e170d", isWalkable: true, hasEffect: false },
-    WALL: { id: 1, color: "#101010", isWalkable: false, hasEffect: false },
-    WATER: { id: 2, color: "#1a3a6a", isWalkable: true, hasEffect: true },
-    FIRE: { id: 3, color: "#ff6600", isWalkable: true, hasEffect: true },
-    START: { id: 4, color: "#8a7200", isWalkable: true, hasEffect: false },
-    EXIT: { id: 5, color: "#006a6a", isWalkable: true, hasEffect: false },
+    FLOOR: { id: 0, color: "#4e170d", sprite: "", isWalkable: true, hasEffect: false },
+    WALL: { id: 1, color: "#101010", sprite: "", isWalkable: false, hasEffect: false },
+    WATER: { id: 2, color: "#1a3a6a", sprite: "", isWalkable: true, hasEffect: true },
+    FIRE: { id: 3, color: "#ff6600", sprite: "", isWalkable: true, hasEffect: true },
+    START: { id: 4, color: "#8a7200", sprite: "", isWalkable: true, hasEffect: false },
+    EXIT: { id: 5, color: "#006a6a", sprite: "", isWalkable: true, hasEffect: false },
 };
 
 const TILE_BY_ID = Object.fromEntries(
@@ -184,9 +184,9 @@ function move(entity, direction, gameState) {
     let newCol = entity.col;
 
     switch (direction) {
-        case "up":    newRow--; break;
-        case "down":  newRow++; break;
-        case "left":  newCol--; break;
+        case "up": newRow--; break;
+        case "down": newRow++; break;
+        case "left": newCol--; break;
         case "right": newCol++; break;
         default:
             return { moved: false, reason: "invalid_direction" };
@@ -507,7 +507,33 @@ function drawMap() {
     for (let row = 0; row < grid.length; row++) {
         for (let col = 0; col < grid[row].length; col++) {
             const tile = TILE_BY_ID[grid[row][col]];
-            r.drawRect(col * TILE_SIZE, row * TILE_SIZE, TILE_SIZE, TILE_SIZE, tile.color);
+            if (tile.sprite) {
+                if (tile === TILE_T.FLOOR) {
+                    const sprite = new Image();
+                    sprite.src = tile.sprite;
+                    r.ctx.drawImage(
+                        sprite,
+                        col * TILE_SIZE,
+                        row * TILE_SIZE,
+                        TILE_SIZE,
+                        TILE_SIZE
+                    )
+                }
+                if (tile === TILE_T.WALL) {
+                    const sprite = new Image();
+                    sprite.src = tile.sprite;
+                    r.ctx.drawImage(
+                        sprite,
+                        col * TILE_SIZE,
+                        row * TILE_SIZE,
+                        TILE_SIZE,
+                        TILE_SIZE
+                    )
+                }
+
+            } else {
+                r.drawRect(col * TILE_SIZE, row * TILE_SIZE, TILE_SIZE, TILE_SIZE, tile.color);
+            }
         }
     }
 }

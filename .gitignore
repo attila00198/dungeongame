@@ -1,11 +1,5 @@
 # Ignore files
 *.log
-npm-debug.log*
-package-lock.json
-tsconfig.json
 
 # Ignore directories
 files/
-node_modules/
-src/
-dist/
