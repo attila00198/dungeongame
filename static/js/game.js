@@ -1,22 +1,24 @@
 // ==================================================
 //  Constants
 // ==================================================
-const TILE_SIZE = 40;
-const factor = 120;
-const GRID_WIDTH = 16 * factor / TILE_SIZE;
-const GRID_HEIGHT = 9 * factor / TILE_SIZE;
+const TILE_SIZE = 32;
+const SCALE = 1;  // 1 = eredeti méret, 0.5 = feleakkora, 2 = kétakkora
+
+const GRID_WIDTH = 48;
+const GRID_HEIGHT = 27;  // 16:9 arány (48/27 ≈ 1.78)
 
 const TILE_T = {
-    FLOOR: { id: 0, color: "#4e170d", sprite: "static/assets/textures/floor.png", isWalkable: true, hasEffect: false },
-    WALL: { id: 1, color: "#101010", sprite: "static/assets/textures/wall.png", isWalkable: false, hasEffect: false },
-    WATER: { id: 2, color: "#1a3a6a", sprite: "", isWalkable: true, hasEffect: true },
-    FIRE: { id: 3, color: "#ff6600", sprite: "", isWalkable: true, hasEffect: true },
-    START: { id: 4, color: "#8a7200", sprite: "", isWalkable: true, hasEffect: false },
-    EXIT: { id: 5, color: "#006a6a", sprite: "", isWalkable: true, hasEffect: false },
+    EMPTY: { id: 0, color: "#060606", sprite: "static/assets/textures/dirt.png", isWalkable: false, hasEffect: false },
+    FLOOR: { id: 1, color: "#4e170d", sprite: "static/assets/textures/floor.png", isWalkable: true, hasEffect: false },
+    WALL: { id: 2, color: "#101010", sprite: "static/assets/textures/wall.png", isWalkable: false, hasEffect: false },
+    WATER: { id: 3, color: "#1a3a6a", sprite: "static/assets/textures/water.png", isWalkable: true, hasEffect: true },
+    FIRE: { id: 4, color: "#ff6600", sprite: "static/assets/textures/lava.png", isWalkable: true, hasEffect: true },
+    START: { id: 5, color: "#8a7200", sprite: "", isWalkable: true, hasEffect: false },
+    EXIT: { id: 6, color: "#006a6a", sprite: "", isWalkable: true, hasEffect: false },
 };
 
 const TILE_BY_ID = Object.fromEntries(
-    Object.values(TILE_T).map(t => [t.id, t])
+    Object.values(TILE_T).map(function (t) { return [t.id, t]; })
 );
 
 // Tile sprite-ok regisztrálása az AssetManagerbe
@@ -24,6 +26,7 @@ Object.values(TILE_T).forEach(function (tile) {
     AssetManager.register(tile.sprite);
 });
 
+const HUD_HEIGHT = 50;
 const VIEW_DISTANCE = 8;
 
 // ==================================================
@@ -62,7 +65,7 @@ function showInfoMessage(message, duration = 2000) {
     gameState.showInfo = true;
     gameState.infoMessage = message;
     if (gameState.infoTimeout) clearTimeout(gameState.infoTimeout);
-    gameState.infoTimeout = setTimeout(() => {
+    gameState.infoTimeout = setTimeout(function () {
         gameState.showInfo = false;
         gameState.infoMessage = "";
     }, duration);
@@ -130,7 +133,7 @@ function getRandomWalkablePosition(minDistanceFrom, minDist = 3) {
 }
 
 function getEntityAt(row, col, entityList) {
-    return entityList.find(e => e.row === row && e.col === col) || null;
+    return entityList.find(function (e) { return e.row === row && e.col === col; }) || null;
 }
 
 function getTileTypeAt(row, col) {
@@ -240,7 +243,7 @@ function handlePlayerCollision(player, target) {
                 ? `Door opened with ${target.requiredKey}`
                 : "Door opened"
             );
-            return true; // ajtó kinyílt, játékos beléphet
+            return true;
         } else {
             showInfoMessage(`Locked! Need: ${target.requiredKey}`);
             return false;
@@ -250,7 +253,7 @@ function handlePlayerCollision(player, target) {
         target.onPickup(player);
         const index = entityLayer.indexOf(target);
         if (index > -1) entityLayer.splice(index, 1);
-        return true; // item felvéve, játékos ráléphet a cellára
+        return true;
     }
     if (target instanceof Chest) {
         target.open(player);
@@ -263,6 +266,9 @@ function handleEnemyCollision(enemy, target) {
     if (target instanceof Player) {
         startCombat(enemy);
         return false;
+    }
+    if (target instanceof Door) {
+        return target.isOpen;
     }
     return false;
 }
@@ -277,7 +283,7 @@ function handleCollision(entity, target, gameState) {
 }
 
 // ==================================================
-//  Rendering Functions
+//  Rendering
 // ==================================================
 function drawEntityLayer(entityList) {
     for (let e of entityList) {
@@ -297,63 +303,46 @@ function drawEntityLayer(entityList) {
 
 function drawEntity(entity) {
     if (!entity) return;
-    if (entity.row >= 0) {
-        let cx = entity.col * TILE_SIZE + (TILE_SIZE - entity.size) / 2;
-        let cy = entity.row * TILE_SIZE + (TILE_SIZE - entity.size) / 2;
-        r.drawRect(cx, cy, entity.size, entity.size, entity.color);
-        if (gameState.inDebugMode) {
-            r.drawText(`${entity.row}:${entity.col}`, cx + entity.size / 2, cy + entity.size / 2, "16px", "white", "center");
+    if (entity.row < 0) return;
+
+    let cx = entity.col * TILE_SIZE + (TILE_SIZE - entity.size) / 2;
+    let cy = entity.row * TILE_SIZE + (TILE_SIZE - entity.size) / 2;
+
+    if (entity.sprite) {
+        const img = AssetManager.get(entity.sprite);
+        if (img) {
+            r.drawImage(img, Math.floor(cx), Math.floor(cy), entity.size, entity.size);
+        } else {
+            r.drawRect(Math.floor(cx), Math.floor(cy), entity.size, entity.size, entity.color);
         }
+    } else {
+        r.drawRect(Math.floor(cx), Math.floor(cy), entity.size, entity.size, entity.color);
+    }
+
+    if (gameState.inDebugMode) {
+        r.drawText(`${entity.row}:${entity.col}`, cx + entity.size / 2, cy + entity.size / 2, "16px", "white", "center");
     }
 }
 
-function drawHUD() {
-    const hudHeight = 50;
-    const padding = 15;
-    const iconSize = 32;
-    const hudY = canvasHeight - hudHeight;
+function renderHUD() {
+    const hud = getById("hud");
+    if (!hud || !gameState.player) return;
 
-    r.drawRect(0, hudY, canvasWidth, hudHeight, "rgba(16, 16, 16, 0.85)");
-    r.drawLine(0, hudY, canvasWidth, hudY, "#444444", 2);
+    const enemiesLeft = entityLayer.filter(function (e) {
+        return e instanceof Enemy;
+    }).length;
 
-    const textY = hudY + padding + 7;
-    let currentX = padding;
+    const keyCount = gameState.player.inventory.filter(function (item) {
+        return item.name && item.name.toLowerCase().includes("key");
+    }).length;
 
-    r.drawRect(currentX, hudY + padding - 4, iconSize, iconSize - 16, "#ff4444");
-    r.drawText(`${gameState.player.health}/100`, currentX + iconSize + 8, textY, "bold 14px", "white", "left", "Courier New");
-    currentX += iconSize + 70;
-
-    r.drawTriangle(
-        currentX + iconSize / 2, hudY + padding - 4,
-        currentX + iconSize - 4, hudY + hudHeight - padding,
-        currentX + 4, hudY + hudHeight - padding,
-        "#ff8844"
-    );
-    r.drawText(`${gameState.player.atk}`, currentX + iconSize + 8, textY, "14px", "white", "left", "Courier New");
-    currentX += iconSize + 50;
-
-    r.drawCircle(currentX + iconSize / 2, hudY + hudHeight / 2, iconSize / 2 - 4, "#4488ff");
-    r.drawText(`${gameState.player.def}`, currentX + iconSize + 8, textY, "14px", "white", "left", "Courier New");
-    currentX += iconSize + 70;
-
-    r.drawLine(currentX, hudY + padding, currentX, hudY + hudHeight - padding, "#444444", 2);
-    currentX += 20;
-
-    const enemiesLeft = entityLayer.filter(e => e instanceof Enemy).length;
-    r.drawRect(currentX, hudY + padding - 4, iconSize - 8, iconSize - 8, "#ff4444");
-    r.drawText(`Enemies: ${enemiesLeft}`, currentX + iconSize + 8, textY, "14px", "white", "left", "Courier New");
-    currentX += iconSize + 130;
-
-    const keyCount = gameState.player.inventory.filter(item =>
-        item.name.toLowerCase().includes("key")
-    ).length;
-    r.drawRect(currentX + 4, hudY + padding - 4, iconSize - 16, iconSize - 16, "#ffdd44");
-    r.drawRect(currentX + iconSize - 12, hudY + padding + 2, 8, iconSize - 26, "#ffdd44");
-    r.drawText(`Keys: ${keyCount}`, currentX + iconSize + 8, textY, "14px", "white", "left", "Courier New");
-    currentX += iconSize + 100;
-
-    r.drawCircle(currentX + 10, hudY + hudHeight / 2, 9, "gold");
-    r.drawText(`${gameState.player.gold} gold`, currentX + 26, textY, "14px", "white", "left", "Courier New");
+    hud.innerHTML =
+        '<span>❤ ' + gameState.player.health + '/100</span>' +
+        '<span>⚔ ' + gameState.player.atk + '</span>' +
+        '<span>🛡 ' + gameState.player.def + '</span>' +
+        '<span>👾 Enemies: ' + enemiesLeft + '</span>' +
+        '<span>🗝 Keys: ' + keyCount + '</span>' +
+        '<span>💰 ' + gameState.player.gold + ' gold</span>';
 }
 
 function drawCombatScreen(player, enemy) {
@@ -424,7 +413,7 @@ function drawInventory() {
         const itemStartY = cy + 118;
         const rowH = 34;
 
-        inv.forEach((item, i) => {
+        inv.forEach(function (item, i) {
             const rowY = itemStartY + i * rowH;
             const isSelected = i === sel;
 
@@ -445,11 +434,11 @@ function drawInventory() {
 
             const labelX = cx + pad + 22;
             const labelY = rowY + rowH / 2 + 2;
-            const label = item instanceof Potion
+            const itemLabel = item instanceof Potion
                 ? `${item.name}  (+${item.healAmount} HP)`
                 : (item.name ?? String(item));
 
-            r.drawText(label, labelX, labelY, "13px",
+            r.drawText(itemLabel, labelX, labelY, "13px",
                 isSelected ? "gold" : "#ccc", "left", "Courier New");
 
             if (isSelected) {
@@ -512,11 +501,13 @@ function drawMap() {
     for (let row = 0; row < grid.length; row++) {
         for (let col = 0; col < grid[row].length; col++) {
             const tile = TILE_BY_ID[grid[row][col]];
+            const x = Math.floor(col * TILE_SIZE);
+            const y = Math.floor(row * TILE_SIZE);
             const img = AssetManager.get(tile.sprite);
             if (img) {
-                r.drawImage(img, col * TILE_SIZE, row * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+                r.drawImage(img, x, y, TILE_SIZE, TILE_SIZE);
             } else {
-                r.drawRect(col * TILE_SIZE, row * TILE_SIZE, TILE_SIZE, TILE_SIZE, tile.color);
+                r.drawRect(x, y, TILE_SIZE, TILE_SIZE, tile.color);
             }
         }
     }
@@ -543,10 +534,10 @@ function handleCombatAction() {
     gameState.combatLog = `You hit ${gameState.currentEnemy.name} for ${damageDone} damage!`;
     gameState.combatTurn = "enemy";
 
-    setTimeout(() => {
+    setTimeout(function () {
         if (!gameState.currentEnemy.isAlive()) {
             gameState.combatLog = `${gameState.currentEnemy.name} defeated!`;
-            setTimeout(() => {
+            setTimeout(function () {
                 let index = entityLayer.indexOf(gameState.currentEnemy);
                 if (index > -1) {
                     entityLayer.splice(index, 1);
@@ -561,7 +552,7 @@ function handleCombatAction() {
         let enemyDamage = gameState.player.takeDamage(gameState.currentEnemy.atk);
         gameState.combatLog = `${gameState.currentEnemy.name} hits you for ${enemyDamage} damage!`;
 
-        setTimeout(() => {
+        setTimeout(function () {
             if (gameState.player.isAlive()) {
                 gameState.combatTurn = "player";
                 gameState.combatLog = "Your turn! Press SPACE!";
@@ -672,7 +663,7 @@ function gameLoop(now) {
     if (gameState.inDebugMode) r.drawGrid("#404040");
     drawEntityLayer(entityLayer);
     if (gameState.player) drawEntity(gameState.player);
-    drawHUD();
+    renderHUD();
 
     if (gameState.gameOver) { drawGameOverScreen(); return; }
     if (gameState.playerWon) { drawVictoryScreen(); return; }
@@ -687,7 +678,7 @@ function gameLoop(now) {
 // ==================================================
 //  Event Handlers
 // ==================================================
-window.addEventListener("keydown", (event) => {
+window.addEventListener("keydown", function (event) {
     if (event.repeat) return;
 
     if (event.key === "i" || event.key === "I") {
@@ -743,12 +734,12 @@ window.addEventListener("keydown", (event) => {
 const appContainer = getById("root");
 appContainer.appendChild(app());
 
-const canvasWidth = 16 * factor;
-const canvasHeight = 9 * factor;
+const canvasWidth = GRID_WIDTH * TILE_SIZE * SCALE;
+const canvasHeight = GRID_HEIGHT * TILE_SIZE * SCALE;
 
 const gameCanvas = getById("game");
 const r = new Renderer(gameCanvas, canvasWidth, canvasHeight);
 
-window.onload = () => {
+window.onload = function () {
     startGame();
-}
+};

@@ -1,19 +1,42 @@
 html,
 body {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-    border: none;
-    font-family: 'Courier New', Courier, monospace;
-    background-color: #0a0a0a;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  background-color: #0a0a0a;
+  height: 100%;
+  overflow: hidden;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+#hud {
+  height: 50px;
+  flex-shrink: 0;
+  background: rgba(16, 16, 16, 0.95);
+  border-bottom: 2px solid #444;
+  display: flex;
+  align-items: center;
+  padding: 0 15px;
+  gap: 30px;
+  font-family: "Courier New", monospace;
+  color: white;
+  z-index: 10;
 }
 
 .container {
-    width: fit-content;
-    margin: 20px auto;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
 }
 
 #game {
-    display: block;
-    border: 2px solid #333;
+  display: block;
+  border: 2px solid #333;
 }

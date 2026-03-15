@@ -5,15 +5,16 @@ const GRID_ROWS = 27;
 const CANVAS_W = GRID_COLS * TILE_SIZE;
 const CANVAS_H = GRID_ROWS * TILE_SIZE;
 
-const TILE_TYPE = { FLOOR: 0, WALL: 1, WATER: 2, FIRE: 3, SPAWN: 4, EXIT: 5 };
+const TILE_TYPE = { EMPTY: 0, FLOOR: 1, WALL: 2, WATER: 3, FIRE: 4, SPAWN: 5, EXIT: 6 };
 
 const TILE_META = [
-    { key: "FLOOR", label: "Floor", value: 0, color: "#3a1a14" },
-    { key: "WALL", label: "Wall", value: 1, color: "#181818" },
-    { key: "WATER", label: "Water", value: 2, color: "#1a3a6a" },
-    { key: "FIRE", label: "Fire", value: 3, color: "#b84800" },
-    { key: "SPAWN", label: "Spawn", value: 4, color: "#8a7200" },
-    { key: "EXIT", label: "Exit", value: 5, color: "#006a6a" },
+    { key: "EMPTY", label: "Empty", value: 0, color: "#060606" },
+    { key: "FLOOR", label: "Floor", value: 1, color: "#3a1a14" },
+    { key: "WALL", label: "Wall", value: 2, color: "#181818" },
+    { key: "WATER", label: "Water", value: 3, color: "#1a3a6a" },
+    { key: "FIRE", label: "Fire", value: 4, color: "#b84800" },
+    { key: "SPAWN", label: "Spawn", value: 5, color: "#8a7200" },
+    { key: "EXIT", label: "Exit", value: 6, color: "#006a6a" },
 ];
 
 const ENTITY_META = [
@@ -90,7 +91,11 @@ function createEmptyGrid() {
     for (let r = 0; r < GRID_ROWS; r++) {
         let row = [];
         for (let c = 0; c < GRID_COLS; c++) {
-            if (r === 0 || r === GRID_ROWS - 1 || c === 0 || c === GRID_COLS - 1) {
+            if (r < 3 || r >= GRID_ROWS - 2 || c < 3 || c >= GRID_COLS - 2) {
+                // Külső void zóna
+                row.push(TILE_TYPE.EMPTY);
+            } else if (r === 3 || r === GRID_ROWS - 3 || c === 3 || c === GRID_COLS - 3) {
+                // Belső kerítő fal
                 row.push(TILE_TYPE.WALL);
             } else {
                 row.push(TILE_TYPE.FLOOR);
@@ -120,7 +125,7 @@ function getEntityColor(type) {
 }
 
 function isWalkableTile(row, col) {
-    const nonWalkable = [TILE_TYPE.WALL];
+    const nonWalkable = [TILE_TYPE.EMPTY, TILE_TYPE.WALL];
     return !nonWalkable.includes(grid[row][col]);
 }
 
@@ -227,6 +232,7 @@ function eraseAt(row, col) {
         entities.splice(idx, 1);
         drawMap();
     } else {
+        // Erase visszaállít FLOOR-ra, nem EMPTY-re
         grid[row][col] = TILE_TYPE.FLOOR;
         drawMap();
     }

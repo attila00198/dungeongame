@@ -32,7 +32,7 @@ class Actor extends GameObject {
 }
 class Player extends Actor {
     constructor(color) {
-        super(-1, -1, color, 15, 100, 20, 5);
+        super(-1, -1, color, 20, 100, 20, 5);
         this.gold = 0;
         this.inventory = [];
     }
@@ -54,7 +54,7 @@ class Enemy extends Actor {
     }
 
     constructor(row, col, name, health, atk, def, color, state = "doIdle") {
-        super(row, col, color, 15, health, atk, def);
+        super(row, col, color, 20, health, atk, def);
         this.name = name;
         this.state = state;
         this.lastKnownPlayerRow = null;
@@ -62,6 +62,7 @@ class Enemy extends Actor {
         this.transitions = {
             doIdle: { seesPlayer: "doChase" },
             doChase: { losesPlayer: "doIdle", reachesLastKnown: "doIdle" },
+            doSearchLastKnown: { seesPlayer: "doChase", reachesLastKnown: "doIdle" },
         };
     }
 
@@ -84,6 +85,35 @@ class Enemy extends Actor {
         if (atLastKnown) this.trigger("reachesLastKnown");
     }
 
+    doSearchLastKnown(player) {
+        if (this.lastKnownPlayerRow === null) {
+            this.trigger("reachesLastKnown");
+            return;
+        }
+
+        const next = bfsNextStep(
+            this.row, this.col,
+            this.lastKnownPlayerRow,
+            this.lastKnownPlayerCol
+        );
+
+        if (next) {
+            const dr = next.row > this.row ? "down" : next.row < this.row ? "up" : null;
+            const dc = next.col > this.col ? "right" : next.col < this.col ? "left" : null;
+            move(this, dr ?? dc, gameState);
+        }
+
+        const atLastKnown =
+            this.row === this.lastKnownPlayerRow &&
+            this.col === this.lastKnownPlayerCol;
+
+        if (atLastKnown) {
+            this.lastKnownPlayerRow = null;
+            this.lastKnownPlayerCol = null;
+            this.trigger("reachesLastKnown");
+        }
+    }
+
     trigger(event) {
         const current = this.transitions[this.state];
         if (current && current[event]) {
@@ -99,10 +129,7 @@ class Enemy extends Actor {
             this.lastKnownPlayerRow = player.row;
             this.lastKnownPlayerCol = player.col;
             this.trigger("seesPlayer");
-        } else if (this.state === "doChase") {
-            this.trigger("losesPlayer");
         }
-
         this[this.state](player);
     }
 }
@@ -119,7 +146,7 @@ class Item extends GameObject {
 }
 class Key extends Item {
     constructor(row, col, name, color) {
-        super(name, row, col, color, 15);
+        super(name, row, col, color, 16);
     }
     onPickup(player) {
         player.inventory.push(this);
@@ -129,7 +156,7 @@ class Key extends Item {
 }
 class Potion extends Item {
     constructor(row, col, name, healAmount) {
-        super(name, row, col, "purple", 15);
+        super(name, row, col, "purple", 16);
         this.healAmount = healAmount;
     }
     onPickup(player) {
@@ -151,7 +178,7 @@ class Potion extends Item {
 }
 class Gold extends Item {
     constructor(row = -1, col = -1, amount) {
-        super("Gold", row, col, "gold", 15);
+        super("Gold", row, col, "gold", 16);
         this.amount = amount;
     }
     onPickup(player) {
@@ -168,7 +195,7 @@ class Structure extends GameObject {
 }
 class Door extends Structure {
     constructor(row, col, requiredKey = null, color = "brown") {
-        super(row, col, color, 15);
+        super(row, col, color, 32);
         this.requiredKey = requiredKey;
         this.isOpen = false;
     }
@@ -191,7 +218,7 @@ class Door extends Structure {
 }
 class Chest extends GameObject {
     constructor(row, col, contents = []) {
-        super(row, col, "orange", 15);
+        super(row, col, "orange", 20);
         this.contents = contents;
         this.isOpen = false;
     }
