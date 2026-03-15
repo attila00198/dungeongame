@@ -19,6 +19,11 @@ const TILE_BY_ID = Object.fromEntries(
     Object.values(TILE_T).map(t => [t.id, t])
 );
 
+// Tile sprite-ok regisztrálása az AssetManagerbe
+Object.values(TILE_T).forEach(function (tile) {
+    AssetManager.register(tile.sprite);
+});
+
 const VIEW_DISTANCE = 8;
 
 // ==================================================
@@ -507,16 +512,9 @@ function drawMap() {
     for (let row = 0; row < grid.length; row++) {
         for (let col = 0; col < grid[row].length; col++) {
             const tile = TILE_BY_ID[grid[row][col]];
-            if (tile.sprite) {
-                const sprite = new Image();
-                sprite.src = tile.sprite;
-                r.ctx.drawImage(
-                    sprite,
-                    col * TILE_SIZE,
-                    row * TILE_SIZE,
-                    TILE_SIZE,
-                    TILE_SIZE
-                )
+            const img = AssetManager.get(tile.sprite);
+            if (img) {
+                r.drawImage(img, col * TILE_SIZE, row * TILE_SIZE, TILE_SIZE, TILE_SIZE);
             } else {
                 r.drawRect(col * TILE_SIZE, row * TILE_SIZE, TILE_SIZE, TILE_SIZE, tile.color);
             }
@@ -654,6 +652,7 @@ async function loadMap(filename) {
 
 async function startGame() {
     gameState.player = new Player("green");
+    await AssetManager.preload();
     await loadMap("../maps/map.json");
     if (!spawnPlayer(gameState.player)) {
         log(3, "No spawn point found in map!");

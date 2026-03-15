@@ -289,6 +289,11 @@ class Renderer {
         this.ctx.stroke();
     }
 
+    drawImage(img, x, y, w, h) {
+        if (!img) return;
+        this.ctx.drawImage(img, x, y, w, h);
+    }
+
     drawGrid(color = "black", thickness = 1) {
         this.ctx.strokeStyle = color;
         this.ctx.lineWidth = thickness;
