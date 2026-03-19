@@ -8,13 +8,17 @@ const GRID_WIDTH = 48;
 const GRID_HEIGHT = 27;  // 16:9 arány (48/27 ≈ 1.78)
 
 const TILE_T = {
-    EMPTY: { id: 0, color: "#060606", sprite: "static/assets/textures/dirt.png", isWalkable: false, hasEffect: false },
-    FLOOR: { id: 1, color: "#4e170d", sprite: "static/assets/textures/floor.png", isWalkable: true, hasEffect: false },
-    WALL: { id: 2, color: "#101010", sprite: "static/assets/textures/wall.png", isWalkable: false, hasEffect: false },
-    WATER: { id: 3, color: "#1a3a6a", sprite: "static/assets/textures/water.png", isWalkable: true, hasEffect: true },
-    FIRE: { id: 4, color: "#ff6600", sprite: "static/assets/textures/lava.png", isWalkable: true, hasEffect: true },
-    START: { id: 5, color: "#8a7200", sprite: "", isWalkable: true, hasEffect: false },
-    EXIT: { id: 6, color: "#006a6a", sprite: "", isWalkable: true, hasEffect: false },
+    EMPTY: { id: 0, color: "#060606", sprite: "static/assets/textures/dirt.png", isWalkable: false, onStep: null },
+    FLOOR: { id: 1, color: "#4e170d", sprite: "static/assets/textures/floor.png", isWalkable: true, onStep: null },
+    WALL: { id: 2, color: "#101010", sprite: "static/assets/textures/wall.png", isWalkable: false, onStep: null },
+    WATER: { id: 3, color: "#1a3a6a", sprite: "static/assets/textures/water.png", isWalkable: true, onStep: null },
+    FIRE: {
+        id: 4, color: "#ff6600", sprite: "static/assets/textures/lava.png", isWalkable: true, onStep: (entity) => {
+            entity.takeDamage(10);
+        }
+    },
+    START: { id: 5, color: "#8a7200", sprite: "", isWalkable: true, onStep: null },
+    EXIT: { id: 6, color: "#006a6a", sprite: "", isWalkable: true, onStep: null },
 };
 
 const TILE_BY_ID = Object.fromEntries(
@@ -214,6 +218,9 @@ function move(entity, direction, gameState) {
     entity.col = newCol;
 
     const tile = TILE_BY_ID[getTileTypeAt(newRow, newCol)];
+    if (tile.onStep) {
+        tile.onStep(entity);
+    }
     if (tile === TILE_T.EXIT) gameState.playerWon = true;
 
     return { moved: true };
@@ -506,8 +513,10 @@ function drawMap() {
             const img = AssetManager.get(tile.sprite);
             if (img) {
                 r.drawImage(img, x, y, TILE_SIZE, TILE_SIZE);
-            } else {
-                r.drawRect(x, y, TILE_SIZE, TILE_SIZE, tile.color);
+            } else if (tile === TILE_T.START) {
+                //r.drawRect(x, y, TILE_SIZE, TILE_SIZE, tile.color);
+                img = AssetManager.get(TILE_T.FLOOR.sprite)
+                r.drawImage(img, x, y, TILE_SIZE, TILE_SIZE);
             }
         }
     }

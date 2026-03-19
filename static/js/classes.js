@@ -37,6 +37,7 @@ class Player extends Actor {
         this.inventory = [];
     }
 }
+
 class Enemy extends Actor {
     static MOVE_INTERVAL = 400;
     static lastMoveTime = 0;
