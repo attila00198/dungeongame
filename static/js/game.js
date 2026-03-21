@@ -2,30 +2,25 @@
 //  Constants
 // ==================================================
 const TILE_SIZE = 32;
-const SCALE = 1;  // 1 = eredeti méret, 0.5 = feleakkora, 2 = kétakkora
+const SCALE = 1;
 
 const GRID_WIDTH = 48;
-const GRID_HEIGHT = 27;  // 16:9 arány (48/27 ≈ 1.78)
+const GRID_HEIGHT = 27;
 
 const TILE_T = {
-    EMPTY: { id: 0, color: "#060606", sprite: "static/assets/textures/dirt.png", isWalkable: false, onStep: null },
-    FLOOR: { id: 1, color: "#4e170d", sprite: "static/assets/textures/floor.png", isWalkable: true, onStep: null },
-    WALL: { id: 2, color: "#101010", sprite: "static/assets/textures/wall.png", isWalkable: false, onStep: null },
-    WATER: { id: 3, color: "#1a3a6a", sprite: "static/assets/textures/water.png", isWalkable: true, onStep: null },
-    FIRE: {
-        id: 4, color: "#ff6600", sprite: "static/assets/textures/lava.png", isWalkable: true, onStep: (entity) => {
-            entity.takeDamage(10);
-        }
-    },
-    START: { id: 5, color: "#8a7200", sprite: "", isWalkable: true, onStep: null },
-    EXIT: { id: 6, color: "#006a6a", sprite: "", isWalkable: true, onStep: null },
+    EMPTY: { id: 0, color: "#060606", sprite: "static/assets/textures/dirt.png", isWalkable: false, hasEffect: false },
+    FLOOR: { id: 1, color: "#4e170d", sprite: "static/assets/textures/floor.png", isWalkable: true, hasEffect: false },
+    WALL: { id: 2, color: "#101010", sprite: "static/assets/textures/wall.png", isWalkable: false, hasEffect: false },
+    WATER: { id: 3, color: "#1a3a6a", sprite: "static/assets/textures/water.png", isWalkable: true, hasEffect: true },
+    FIRE: { id: 4, color: "#ff6600", sprite: "static/assets/textures/lava.png", isWalkable: true, hasEffect: true },
+    START: { id: 5, color: "#8a7200", sprite: "", isWalkable: true, hasEffect: false },
+    EXIT: { id: 6, color: "#006a6a", sprite: "", isWalkable: true, hasEffect: false },
 };
 
 const TILE_BY_ID = Object.fromEntries(
     Object.values(TILE_T).map(function (t) { return [t.id, t]; })
 );
 
-// Tile sprite-ok regisztrálása az AssetManagerbe
 Object.values(TILE_T).forEach(function (tile) {
     AssetManager.register(tile.sprite);
 });
@@ -34,56 +29,58 @@ const HUD_HEIGHT = 50;
 const VIEW_DISTANCE = 8;
 
 // ==================================================
-//  Global State
+//  Global Map & Entity Data
 // ==================================================
 let grid = [];
 let entityLayer = [];
 
-const gameState = {
-    player: null,
-    animationId: null,
-    inDebugMode: false,
-    isPaused: false,
-    isInventoryOpen: false,
-    inventorySelectedIndex: 0,
-    isInCombat: false,
-    currentEnemy: null,
-    combatTurn: "",
-    combatLog: "",
-    gameOver: false,
-    playerWon: false,
-    showInfo: false,
-    infoMessage: "",
-    infoTimeout: null
-};
+// ==================================================
+//  Transition Hooks
+// ==================================================
+function initTransitions() {
+    gameState.onTransition("COMBAT→PLAYING", function () {
+        combatData.currentEnemy = null;
+        combatData.log = "";
+        combatData.turn = "";
+    });
+
+    gameState.onTransition("COMBAT→GAME_OVER", function () {
+        combatData.currentEnemy = null;
+        combatData.log = "";
+        combatData.turn = "";
+    });
+
+    gameState.onTransition("INVENTORY→PLAYING", function () {
+        inventoryData.selectedIndex = 0;
+    });
+}
 
 // ==================================================
 //  Utility Functions
 // ==================================================
 function log(level, message) {
     const levels = ["DEBUG", "INFO", "WARN", "ERROR"];
-    console.log(`[${levels[level]}]: ${message}`);
+    console.log("[" + levels[level] + "]: " + message);
 }
 
-function showInfoMessage(message, duration = 2000) {
-    gameState.showInfo = true;
-    gameState.infoMessage = message;
-    if (gameState.infoTimeout) clearTimeout(gameState.infoTimeout);
-    gameState.infoTimeout = setTimeout(function () {
-        gameState.showInfo = false;
-        gameState.infoMessage = "";
+function showInfoMessage(message, duration) {
+    duration = duration || 2000;
+    infoData.message = message;
+    if (infoData.timeout) clearTimeout(infoData.timeout);
+    infoData.timeout = setTimeout(function () {
+        infoData.message = "";
     }, duration);
 }
 
 function isValidPosition(row, col) {
     if (row < 0 || row >= grid.length || col < 0 || col >= grid[0].length) return false;
     const tile = TILE_BY_ID[grid[row][col]];
-    return tile?.isWalkable ?? false;
+    return tile ? tile.isWalkable : false;
 }
 
 function isValidRange(entity, player) {
-    let dx = entity.col - player.col;
-    let dy = entity.row - player.row;
+    var dx = entity.col - player.col;
+    var dy = entity.row - player.row;
     return Math.abs(dx) + Math.abs(dy) <= VIEW_DISTANCE;
 }
 
@@ -91,49 +88,35 @@ function hasLineOfSight(entity, player) {
     if (!isValidRange(entity, player)) return false;
     if (!player) return false;
 
-    let x1 = player.col, y1 = player.row;
-    let x2 = entity.col, y2 = entity.row;
-    let dx = x2 - x1, dy = y2 - y1;
-    let steps = Math.max(Math.abs(dx), Math.abs(dy)) * 2;
+    var x1 = player.col, y1 = player.row;
+    var x2 = entity.col, y2 = entity.row;
+    var dx = x2 - x1, dy = y2 - y1;
+    var steps = Math.max(Math.abs(dx), Math.abs(dy)) * 2;
     if (steps === 0) return true;
 
-    for (let i = 1; i <= steps; i++) {
-        let t = i / steps;
-        let exactCol = x1 + dx * t;
-        let exactRow = y1 + dy * t;
+    for (var i = 1; i <= steps; i++) {
+        var t = i / steps;
+        var exactCol = x1 + dx * t;
+        var exactRow = y1 + dy * t;
 
-        const cellsToCheck = [
+        var cellsToCheck = [
             { r: Math.floor(exactRow), c: Math.floor(exactCol) },
             { r: Math.ceil(exactRow), c: Math.ceil(exactCol) },
         ];
 
-        for (const { r, c } of cellsToCheck) {
-            if (r === y2 && c === x2) return true;
-            if (!grid[r] || grid[r][c] === undefined) continue;
-            const tile = TILE_BY_ID[grid[r][c]];
+        for (var j = 0; j < cellsToCheck.length; j++) {
+            var r2 = cellsToCheck[j].r;
+            var c2 = cellsToCheck[j].c;
+            if (r2 === y2 && c2 === x2) return true;
+            if (!grid[r2] || grid[r2][c2] === undefined) continue;
+            var tile = TILE_BY_ID[grid[r2][c2]];
             if (tile === TILE_T.WALL) return false;
-            const blocker = getEntityAt(r, c, entityLayer);
+            var blocker = getEntityAt(r2, c2, entityLayer);
             if (blocker instanceof Door && !blocker.isOpen) return false;
         }
     }
 
     return true;
-}
-
-function getRandomWalkablePosition(minDistanceFrom, minDist = 3) {
-    let attempts = 0;
-    while (attempts < 1000) {
-        let row = Math.floor(Math.random() * GRID_HEIGHT);
-        let col = Math.floor(Math.random() * GRID_WIDTH);
-        if (!isValidPosition(row, col)) { attempts++; continue; }
-        if (getEntityAt(row, col, entityLayer) !== null) { attempts++; continue; }
-        if (minDistanceFrom) {
-            let distance = Math.abs(row - minDistanceFrom.row) + Math.abs(col - minDistanceFrom.col);
-            if (distance < minDist) { attempts++; continue; }
-        }
-        return { row, col, success: true };
-    }
-    return { row: -1, col: -1, success: false };
 }
 
 function getEntityAt(row, col, entityList) {
@@ -147,11 +130,11 @@ function getTileTypeAt(row, col) {
 function bfsNextStep(fromRow, fromCol, toRow, toCol) {
     if (fromRow === toRow && fromCol === toCol) return null;
 
-    const queue = [{ row: fromRow, col: fromCol, path: [] }];
-    const visited = new Set();
-    visited.add(`${fromRow},${fromCol}`);
+    var queue = [{ row: fromRow, col: fromCol, path: [] }];
+    var visited = new Set();
+    visited.add(fromRow + "," + fromCol);
 
-    const dirs = [
+    var dirs = [
         { dr: -1, dc: 0 },
         { dr: 1, dc: 0 },
         { dr: 0, dc: -1 },
@@ -159,29 +142,32 @@ function bfsNextStep(fromRow, fromCol, toRow, toCol) {
     ];
 
     while (queue.length > 0) {
-        const { row, col, path } = queue.shift();
+        var current = queue.shift();
+        var row = current.row;
+        var col = current.col;
+        var path = current.path;
 
-        for (const { dr, dc } of dirs) {
-            const nr = row + dr;
-            const nc = col + dc;
-            const key = `${nr},${nc}`;
+        for (var i = 0; i < dirs.length; i++) {
+            var nr = row + dirs[i].dr;
+            var nc = col + dirs[i].dc;
+            var key = nr + "," + nc;
 
             if (visited.has(key)) continue;
             visited.add(key);
 
             if (nr === toRow && nc === toCol) {
-                const fullPath = [...path, { row: nr, col: nc }];
+                var fullPath = path.concat([{ row: nr, col: nc }]);
                 return fullPath[0];
             }
 
             if (!grid[nr]) continue;
-            const tile = TILE_BY_ID[grid[nr][nc]];
-            if (!tile?.isWalkable) continue;
+            var tile = TILE_BY_ID[grid[nr][nc]];
+            if (!tile || !tile.isWalkable) continue;
 
-            const occupant = getEntityAt(nr, nc, entityLayer);
+            var occupant = getEntityAt(nr, nc, entityLayer);
             if (occupant instanceof Door && !occupant.isOpen) continue;
 
-            queue.push({ row: nr, col: nc, path: [...path, { row: nr, col: nc }] });
+            queue.push({ row: nr, col: nc, path: path.concat([{ row: nr, col: nc }]) });
         }
     }
 
@@ -191,9 +177,9 @@ function bfsNextStep(fromRow, fromCol, toRow, toCol) {
 // ==================================================
 //  Movement
 // ==================================================
-function move(entity, direction, gameState) {
-    let newRow = entity.row;
-    let newCol = entity.col;
+function move(entity, direction, state) {
+    var newRow = entity.row;
+    var newCol = entity.col;
 
     switch (direction) {
         case "up": newRow--; break;
@@ -208,20 +194,17 @@ function move(entity, direction, gameState) {
         return { moved: false, reason: "blocked_tile" };
     }
 
-    const target = getEntityAt(newRow, newCol, entityLayer);
+    var target = getEntityAt(newRow, newCol, entityLayer);
     if (target) {
-        const allowMove = handleCollision(entity, target, gameState);
+        var allowMove = handleCollision(entity, target, state);
         if (!allowMove) return { moved: false, reason: "collision", entity: target };
     }
 
     entity.row = newRow;
     entity.col = newCol;
 
-    const tile = TILE_BY_ID[getTileTypeAt(newRow, newCol)];
-    if (tile.onStep) {
-        tile.onStep(entity);
-    }
-    if (tile === TILE_T.EXIT) gameState.playerWon = true;
+    var tile = TILE_BY_ID[getTileTypeAt(newRow, newCol)];
+    if (tile === TILE_T.EXIT) gameState.transition(GAME_STATE.VICTORY);
 
     return { moved: true };
 }
@@ -230,12 +213,11 @@ function move(entity, direction, gameState) {
 //  Collision
 // ==================================================
 function startCombat(enemy) {
-    if (gameState.isInCombat) return;
-    gameState.isInCombat = true;
-    gameState.currentEnemy = enemy;
-    gameState.combatTurn = "player";
-    gameState.combatLog = `Engaged ${enemy.name}! Press SPACE!`;
-    log(1, `[COMBAT] Started with ${enemy.name}`);
+    if (!gameState.transition(GAME_STATE.COMBAT)) return;
+    combatData.currentEnemy = enemy;
+    combatData.turn = "player";
+    combatData.log = "Engaged " + enemy.name + "! Press SPACE!";
+    log(1, "[COMBAT] Started with " + enemy.name);
 }
 
 function handlePlayerCollision(player, target) {
@@ -247,18 +229,18 @@ function handlePlayerCollision(player, target) {
         if (target.canOpen(player)) {
             target.open();
             showInfoMessage(target.requiredKey
-                ? `Door opened with ${target.requiredKey}`
+                ? "Door opened with " + target.requiredKey
                 : "Door opened"
             );
             return true;
         } else {
-            showInfoMessage(`Locked! Need: ${target.requiredKey}`);
+            showInfoMessage("Locked! Need: " + target.requiredKey);
             return false;
         }
     }
     if (target instanceof Item) {
         target.onPickup(player);
-        const index = entityLayer.indexOf(target);
+        var index = entityLayer.indexOf(target);
         if (index > -1) entityLayer.splice(index, 1);
         return true;
     }
@@ -280,7 +262,7 @@ function handleEnemyCollision(enemy, target) {
     return false;
 }
 
-function handleCollision(entity, target, gameState) {
+function handleCollision(entity, target, state) {
     if (entity instanceof Player) {
         return handlePlayerCollision(entity, target);
     } else if (entity instanceof Enemy) {
@@ -293,16 +275,19 @@ function handleCollision(entity, target, gameState) {
 //  Rendering
 // ==================================================
 function drawEntityLayer(entityList) {
-    for (let e of entityList) {
+    var i, e;
+    for (i = 0; i < entityList.length; i++) {
+        e = entityList[i];
         if (e instanceof Player) continue;
         if (e instanceof Structure) drawEntity(e);
     }
-    for (let e of entityList) {
+    for (i = 0; i < entityList.length; i++) {
+        e = entityList[i];
         if (e instanceof Player) continue;
         if (e instanceof Structure) continue;
-        if (gameState.player != null && hasLineOfSight(e, gameState.player)) {
+        if (gameState.player !== null && hasLineOfSight(e, gameState.player)) {
             drawEntity(e);
-        } else if (gameState.player != null && gameState.inDebugMode) {
+        } else if (gameState.player !== null && gameState.inDebugMode) {
             drawEntity(e);
         }
     }
@@ -312,11 +297,11 @@ function drawEntity(entity) {
     if (!entity) return;
     if (entity.row < 0) return;
 
-    let cx = entity.col * TILE_SIZE + (TILE_SIZE - entity.size) / 2;
-    let cy = entity.row * TILE_SIZE + (TILE_SIZE - entity.size) / 2;
+    var cx = entity.col * TILE_SIZE + (TILE_SIZE - entity.size) / 2;
+    var cy = entity.row * TILE_SIZE + (TILE_SIZE - entity.size) / 2;
 
     if (entity.sprite) {
-        const img = AssetManager.get(entity.sprite);
+        var img = AssetManager.get(entity.sprite);
         if (img) {
             r.drawImage(img, Math.floor(cx), Math.floor(cy), entity.size, entity.size);
         } else {
@@ -327,123 +312,120 @@ function drawEntity(entity) {
     }
 
     if (gameState.inDebugMode) {
-        r.drawText(`${entity.row}:${entity.col}`, cx + entity.size / 2, cy + entity.size / 2, "16px", "white", "center");
+        r.drawText(entity.row + ":" + entity.col, cx + entity.size / 2, cy + entity.size / 2, "16px", "white", "center");
     }
 }
 
 function renderHUD() {
-    const hud = getById("hud");
+    var hud = getById("hud");
     if (!hud || !gameState.player) return;
 
-    const enemiesLeft = entityLayer.filter(function (e) {
+    var enemiesLeft = entityLayer.filter(function (e) {
         return e instanceof Enemy;
     }).length;
 
-    const keyCount = gameState.player.inventory.filter(function (item) {
-        return item.name && item.name.toLowerCase().includes("key");
+    var keyCount = gameState.player.inventory.filter(function (item) {
+        return item.name && item.name.toLowerCase().indexOf("key") !== -1;
     }).length;
 
     hud.innerHTML =
-        '<span>❤ ' + gameState.player.health + '/100</span>' +
-        '<span>⚔ ' + gameState.player.atk + '</span>' +
-        '<span>🛡 ' + gameState.player.def + '</span>' +
-        '<span>👾 Enemies: ' + enemiesLeft + '</span>' +
-        '<span>🗝 Keys: ' + keyCount + '</span>' +
-        '<span>💰 ' + gameState.player.gold + ' gold</span>';
+        "<span>❤ " + gameState.player.health + "/100</span>" +
+        "<span>⚔ " + gameState.player.atk + "</span>" +
+        "<span>🛡 " + gameState.player.def + "</span>" +
+        "<span>👾 Enemies: " + enemiesLeft + "</span>" +
+        "<span>🗝 Keys: " + keyCount + "</span>" +
+        "<span>💰 " + gameState.player.gold + " gold</span>";
 }
 
 function drawCombatScreen(player, enemy) {
-    let swScaled = canvasWidth * 0.7;
-    let shScaled = canvasHeight * 0.7;
-    let cx = (canvasWidth - swScaled) / 2;
-    let cy = (canvasHeight - shScaled) / 2;
+    var swScaled = canvasWidth * 0.7;
+    var shScaled = canvasHeight * 0.7;
+    var cx = (canvasWidth - swScaled) / 2;
+    var cy = (canvasHeight - shScaled) / 2;
 
     r.drawRect(cx, cy, swScaled, shScaled, "#1a1a1a");
     r.drawFrame(cx, cy, swScaled, shScaled, 20, "orange", 3);
     r.drawText("COMBAT", cx + swScaled / 2, cy + 50, "bold 24px");
 
-    const entitySize = 100;
-    const pX = cx + 100;
-    const pY = cy + shScaled / 2;
+    var entitySize = 100;
+    var pX = cx + 100;
+    var pY = cy + shScaled / 2;
 
-    const pColor = player.flashFrames > 0 ? "white" : player.color;
+    var pColor = player.flashFrames > 0 ? "white" : player.color;
     if (player.flashFrames > 0) player.flashFrames--;
     r.drawRect(pX, pY, entitySize, entitySize, pColor);
 
-    if (gameState.combatTurn === "player") r.drawText("▼", pX + entitySize / 2, pY - 75, "20px", "gold");
-    r.drawText(`HP: ${player.health}`, pX, pY - 45, "14px", "white", "left", "Consolas");
-    r.drawText(`ATK: ${player.atk}`, pX, pY - 30, "14px", "white", "left", "Consolas");
-    r.drawText(`DEF: ${player.def}`, pX, pY - 15, "14px", "white", "left", "Consolas");
+    if (combatData.turn === "player") r.drawText("▼", pX + entitySize / 2, pY - 75, "20px", "gold");
+    r.drawText("HP: " + player.health, pX, pY - 45, "14px", "white", "left", "Consolas");
+    r.drawText("ATK: " + player.atk, pX, pY - 30, "14px", "white", "left", "Consolas");
+    r.drawText("DEF: " + player.def, pX, pY - 15, "14px", "white", "left", "Consolas");
     r.drawText("Player", pX + entitySize / 2, pY - 60, "16px", "green", "center");
 
-    const eX = cx + swScaled - 100 - entitySize;
-    const eY = cy + shScaled / 2;
+    var eX = cx + swScaled - 100 - entitySize;
+    var eY = cy + shScaled / 2;
 
-    const eColor = enemy.flashFrames > 0 ? "white" : enemy.color;
+    var eColor = enemy.flashFrames > 0 ? "white" : enemy.color;
     if (enemy.flashFrames > 0) enemy.flashFrames--;
     r.drawRect(eX, eY, entitySize, entitySize, eColor);
 
-    if (gameState.combatTurn === "enemy") r.drawText("▼", eX + entitySize / 2, eY - 75, "20px", "gold");
-    r.drawText(`HP: ${enemy.health}`, eX + entitySize, eY - 45, "14px", "white", "right", "Consolas");
-    r.drawText(`ATK: ${enemy.atk}`, eX + entitySize, eY - 30, "14px", "white", "right", "Consolas");
-    r.drawText(`DEF: ${enemy.def}`, eX + entitySize, eY - 15, "14px", "white", "right", "Consolas");
+    if (combatData.turn === "enemy") r.drawText("▼", eX + entitySize / 2, eY - 75, "20px", "gold");
+    r.drawText("HP: " + enemy.health, eX + entitySize, eY - 45, "14px", "white", "right", "Consolas");
+    r.drawText("ATK: " + enemy.atk, eX + entitySize, eY - 30, "14px", "white", "right", "Consolas");
+    r.drawText("DEF: " + enemy.def, eX + entitySize, eY - 15, "14px", "white", "right", "Consolas");
     r.drawText(enemy.name, eX + entitySize / 2, eY - 60, "16px", "red", "center");
-    r.drawText(gameState.combatLog, cx + swScaled / 2, cy + shScaled - 40, "italic 16px", "gold");
+    r.drawText(combatData.log, cx + swScaled / 2, cy + shScaled - 40, "italic 16px", "gold");
 }
 
 function drawInventory() {
-    const cw = r.canvas.width;
-    const ch = r.canvas.height;
-
-    const w = cw * 0.4;
-    const h = ch * 0.6;
-    const cx = (cw - w) / 2;
-    const cy = (ch - h) / 2;
-
-    const pad = 30;
-    const inv = gameState.player.inventory;
-    const sel = gameState.inventorySelectedIndex;
+    var cw = r.canvas.width;
+    var ch = r.canvas.height;
+    var w = cw * 0.4;
+    var h = ch * 0.6;
+    var cx = (cw - w) / 2;
+    var cy = (ch - h) / 2;
+    var pad = 30;
+    var inv = gameState.player.inventory;
+    var sel = inventoryData.selectedIndex;
 
     r.drawRect(cx, cy, w, h, "#1a1a1a");
     r.drawFrame(cx, cy, w, h, 15, "gold", 3);
-
     r.drawText("INVENTORY", cx + w / 2, cy + 42, "bold 22px", "gold", "center", "Courier New");
     r.drawLine(cx + pad, cy + 55, cx + w - pad, cy + 55, "#444", 2);
 
     r.drawCircle(cx + pad + 8, cy + 82, 8, "gold");
-    r.drawText(`${gameState.player.gold} gold`, cx + pad + 24, cy + 87, "15px", "#ffd700", "left", "Courier New");
+    r.drawText(gameState.player.gold + " gold", cx + pad + 24, cy + 87, "15px", "#ffd700", "left", "Courier New");
     r.drawLine(cx + pad, cy + 100, cx + w - pad, cy + 100, "#333", 1);
 
     if (inv.length === 0) {
         r.drawText("(empty)", cx + w / 2, cy + 140, "13px", "#555", "center", "Courier New");
     } else {
-        const itemStartY = cy + 118;
-        const rowH = 34;
+        var itemStartY = cy + 118;
+        var rowH = 34;
 
         inv.forEach(function (item, i) {
-            const rowY = itemStartY + i * rowH;
-            const isSelected = i === sel;
+            var rowY = itemStartY + i * rowH;
+            var isSelected = i === sel;
 
             if (isSelected) {
                 r.drawRect(cx + pad - 6, rowY - 2, w - pad * 2 + 12, rowH - 4, "rgba(255,200,50,0.1)");
                 r.drawFrame(cx + pad - 6, rowY - 2, w - pad * 2 + 12, rowH - 4, 0, "rgba(255,200,50,0.5)", 1);
             }
 
-            const iconX = cx + pad + 8;
-            const iconY = rowY + rowH / 2 - 6;
+            var iconX = cx + pad + 8;
+            var iconY = rowY + rowH / 2 - 6;
             if (item instanceof Potion) {
                 r.drawCircle(iconX, iconY + 6, 7, isSelected ? "#cc66ff" : "#7a3a99");
             } else if (item instanceof Key) {
-                r.drawRect(iconX - 6, iconY, 12, 12, item.color ?? "gold");
+                r.drawRect(iconX - 6, iconY, 12, 12, item.color || "gold");
             } else {
                 r.drawRect(iconX - 6, iconY, 12, 12, "#888");
             }
 
-            const labelX = cx + pad + 22;
-            const labelY = rowY + rowH / 2 + 2;
-            const itemLabel = item instanceof Potion
-                ? `${item.name}  (+${item.healAmount} HP)`
-                : (item.name ?? String(item));
+            var labelX = cx + pad + 22;
+            var labelY = rowY + rowH / 2 + 2;
+            var itemLabel = item instanceof Potion
+                ? item.name + "  (+" + item.healAmount + " HP)"
+                : (item.name || String(item));
 
             r.drawText(itemLabel, labelX, labelY, "13px",
                 isSelected ? "gold" : "#ccc", "left", "Courier New");
@@ -460,18 +442,18 @@ function drawInventory() {
 }
 
 function drawPauseScreen() {
-    let w = 400, h = 200;
-    let cx = canvasWidth / 2 - w / 2;
-    let cy = canvasHeight / 2 - h / 2;
+    var w = 400, h = 200;
+    var cx = canvasWidth / 2 - w / 2;
+    var cy = canvasHeight / 2 - h / 2;
     r.drawRect(cx, cy, w, h, "#101010");
     r.drawFrame(cx, cy, w, h, 10, "yellow", 2);
     r.drawText("PAUSED", canvasWidth / 2, canvasHeight / 2, "bold 32px", "yellow");
 }
 
 function drawVictoryScreen() {
-    let w = canvasWidth * 0.6, h = canvasHeight * 0.4;
-    let cx = (canvasWidth - w) / 2;
-    let cy = (canvasHeight - h) / 2;
+    var w = canvasWidth * 0.6, h = canvasHeight * 0.4;
+    var cx = (canvasWidth - w) / 2;
+    var cy = (canvasHeight - h) / 2;
     r.drawRect(cx, cy, w, h, "#1a4d1a");
     r.drawFrame(cx, cy, w, h, 20, "gold", 4);
     r.drawText("VICTORY!", cx + w / 2, cy + h / 2 - 20, "bold 32px", "gold");
@@ -479,9 +461,9 @@ function drawVictoryScreen() {
 }
 
 function drawGameOverScreen() {
-    let w = canvasWidth * 0.6, h = canvasHeight * 0.4;
-    let cx = (canvasWidth - w) / 2;
-    let cy = (canvasHeight - h) / 2;
+    var w = canvasWidth * 0.6, h = canvasHeight * 0.4;
+    var cx = (canvasWidth - w) / 2;
+    var cy = (canvasHeight - h) / 2;
     r.drawRect(cx, cy, w, h, "#4d1a1a");
     r.drawFrame(cx, cy, w, h, 20, "darkred", 4);
     r.drawText("GAME OVER", cx + w / 2, cy + h / 2 - 20, "bold 32px", "red");
@@ -489,12 +471,12 @@ function drawGameOverScreen() {
 }
 
 function drawInfoScreen() {
-    let w = canvasWidth * 0.6, h = canvasHeight * 0.15;
-    let cx = (canvasWidth - w) / 2;
-    let cy = canvasHeight - h - 40;
+    var w = canvasWidth * 0.6, h = canvasHeight * 0.15;
+    var cx = (canvasWidth - w) / 2;
+    var cy = canvasHeight - h - 40;
     r.drawRect(cx, cy, w, h, "#1a1a4d");
     r.drawFrame(cx, cy, w, h, 10, "cyan", 3);
-    r.drawText(gameState.infoMessage, cx + w / 2, cy + h / 2 + 5, "16px", "white");
+    r.drawText(infoData.message, cx + w / 2, cy + h / 2 + 5, "16px", "white");
 }
 
 function drawErrorScreen(message) {
@@ -505,18 +487,16 @@ function drawErrorScreen(message) {
 }
 
 function drawMap() {
-    for (let row = 0; row < grid.length; row++) {
-        for (let col = 0; col < grid[row].length; col++) {
-            const tile = TILE_BY_ID[grid[row][col]];
-            const x = Math.floor(col * TILE_SIZE);
-            const y = Math.floor(row * TILE_SIZE);
-            const img = AssetManager.get(tile.sprite);
+    for (var row = 0; row < grid.length; row++) {
+        for (var col = 0; col < grid[row].length; col++) {
+            var tile = TILE_BY_ID[grid[row][col]];
+            var x = Math.floor(col * TILE_SIZE);
+            var y = Math.floor(row * TILE_SIZE);
+            var img = AssetManager.get(tile.sprite);
             if (img) {
                 r.drawImage(img, x, y, TILE_SIZE, TILE_SIZE);
-            } else if (tile === TILE_T.START) {
-                //r.drawRect(x, y, TILE_SIZE, TILE_SIZE, tile.color);
-                img = AssetManager.get(TILE_T.FLOOR.sprite)
-                r.drawImage(img, x, y, TILE_SIZE, TILE_SIZE);
+            } else {
+                r.drawRect(x, y, TILE_SIZE, TILE_SIZE, tile.color);
             }
         }
     }
@@ -537,57 +517,63 @@ function app() {
 //  Combat Logic
 // ==================================================
 function handleCombatAction() {
-    if (!gameState.isInCombat || gameState.combatTurn !== "player") return;
+    if (!gameState.is(GAME_STATE.COMBAT) || combatData.turn !== "player") return;
 
-    let damageDone = gameState.currentEnemy.takeDamage(gameState.player.atk);
-    gameState.combatLog = `You hit ${gameState.currentEnemy.name} for ${damageDone} damage!`;
-    gameState.combatTurn = "enemy";
+    var damageDone = combatData.currentEnemy.takeDamage(gameState.player.atk);
+    combatData.log = "You hit " + combatData.currentEnemy.name + " for " + damageDone + " damage!";
+    combatData.turn = "enemy";
 
     setTimeout(function () {
-        if (!gameState.currentEnemy.isAlive()) {
-            gameState.combatLog = `${gameState.currentEnemy.name} defeated!`;
+        if (!combatData.currentEnemy.isAlive()) {
+            combatData.log = combatData.currentEnemy.name + " defeated!";
             setTimeout(function () {
-                let index = entityLayer.indexOf(gameState.currentEnemy);
+                var index = entityLayer.indexOf(combatData.currentEnemy);
                 if (index > -1) {
                     entityLayer.splice(index, 1);
-                    log(1, `[COMBAT] Removed ${gameState.currentEnemy.name}`);
+                    log(1, "[COMBAT] Removed " + combatData.currentEnemy.name);
                 }
-                gameState.isInCombat = false;
-                gameState.currentEnemy = null;
+                gameState.transition(GAME_STATE.PLAYING);
             }, 1500);
             return;
         }
 
-        let enemyDamage = gameState.player.takeDamage(gameState.currentEnemy.atk);
-        gameState.combatLog = `${gameState.currentEnemy.name} hits you for ${enemyDamage} damage!`;
+        var enemyDamage = gameState.player.takeDamage(combatData.currentEnemy.atk);
+        combatData.log = combatData.currentEnemy.name + " hits you for " + enemyDamage + " damage!";
 
         setTimeout(function () {
             if (gameState.player.isAlive()) {
-                gameState.combatTurn = "player";
-                gameState.combatLog = "Your turn! Press SPACE!";
+                combatData.turn = "player";
+                combatData.log = "Your turn! Press SPACE!";
             } else {
-                gameState.combatLog = "You have been defeated...";
-                gameState.gameOver = true;
+                combatData.log = "You have been defeated...";
+                gameState.transition(GAME_STATE.GAME_OVER);
             }
         }, 1500);
     }, 1500);
 }
 
 function toggleInventory() {
-    gameState.isInventoryOpen = !gameState.isInventoryOpen;
-    gameState.isPaused = gameState.isInventoryOpen;
+    if (gameState.is(GAME_STATE.PLAYING)) {
+        gameState.transition(GAME_STATE.INVENTORY);
+    } else if (gameState.is(GAME_STATE.INVENTORY)) {
+        gameState.transition(GAME_STATE.PLAYING);
+    }
 }
 
 function togglePause() {
-    gameState.isPaused = !gameState.isPaused;
+    if (gameState.is(GAME_STATE.PLAYING)) {
+        gameState.transition(GAME_STATE.PAUSED);
+    } else if (gameState.is(GAME_STATE.PAUSED)) {
+        gameState.transition(GAME_STATE.PLAYING);
+    }
 }
 
 // ==================================================
 //  Game Logic
 // ==================================================
 function spawnPlayer(player) {
-    for (let row = 0; row < grid.length; row++) {
-        for (let col = 0; col < grid[row].length; col++) {
+    for (var row = 0; row < grid.length; row++) {
+        for (var col = 0; col < grid[row].length; col++) {
             if (grid[row][col] === TILE_T.START.id) {
                 player.row = row;
                 player.col = col;
@@ -604,19 +590,19 @@ function instantiateEntity(data) {
         case "Enemy":
             return new Enemy(data.row, data.col, data.name, data.health, data.atk, data.def, "red");
         case "Key":
-            return new Key(data.row, data.col, data.name, data.color ?? "gold");
+            return new Key(data.row, data.col, data.name, data.color || "gold");
         case "Potion":
             return new Potion(data.row, data.col, data.name, data.healAmount);
         case "Gold":
             return new Gold(data.row, data.col, data.amount);
         case "Door":
-            return new Door(data.row, data.col, data.requiredKey ?? null);
+            return new Door(data.row, data.col, data.requiredKey || null);
         case "Chest": {
-            const contents = (data.contents ?? []).map(instantiateEntity);
+            var contents = (data.contents || []).map(instantiateEntity);
             return new Chest(data.row, data.col, contents);
         }
         default:
-            console.warn(`[LOAD] Unknown entity type: ${data.type}`);
+            console.warn("[LOAD] Unknown entity type: " + data.type);
             return null;
     }
 }
@@ -626,47 +612,47 @@ function instantiateEntity(data) {
 // ==================================================
 async function loadMap(filename) {
     try {
-        const res = await fetch(filename);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        var res = await fetch(filename);
+        if (!res.ok) throw new Error("HTTP " + res.status);
 
-        const data = await res.json();
+        var data = await res.json();
         if (!data.grid || !data.entities)
             throw new Error("Invalid map format");
 
         grid = data.grid;
         entityLayer = [];
 
-        for (const entityData of data.entities) {
-            const entity = instantiateEntity(entityData);
+        for (var i = 0; i < data.entities.length; i++) {
+            var entity = instantiateEntity(data.entities[i]);
             if (entity) entityLayer.push(entity);
         }
 
-        log(1, `Map loaded: ${filename}`);
-        log(1, `Grid: ${grid[0].length}x${grid.length}, Entities: ${entityLayer.length}`);
+        log(1, "Map loaded: " + filename);
+        log(1, "Grid: " + grid[0].length + "x" + grid.length + ", Entities: " + entityLayer.length);
     } catch (err) {
-        log(3, `Failed to load map: ${err.message}`);
-        drawErrorScreen(`Could not load map.json\n${err.message}`);
+        log(3, "Failed to load map: " + err.message);
+        drawErrorScreen("Could not load map.json\n" + err.message);
         throw err;
     }
 }
 
 async function startGame() {
     gameState.player = new Player("green");
+    initTransitions();
     await AssetManager.preload();
-    await loadMap("../maps/map.json");
+    await loadMap("/maps/map.json");
     if (!spawnPlayer(gameState.player)) {
         log(3, "No spawn point found in map!");
         drawErrorScreen("No START tile found in map.");
         return;
     }
     entityLayer.push(gameState.player);
-    log(1, `Player spawned at (${gameState.player.row}, ${gameState.player.col})`);
+    log(1, "Player spawned at (" + gameState.player.row + ", " + gameState.player.col + ")");
+    gameState.transition(GAME_STATE.PLAYING);
     requestAnimationFrame(gameLoop);
 }
 
 function gameLoop(now) {
-    if (!gameState.inDebugMode) Enemy.tick(now, gameState.player);
-
     r.clear();
     drawMap();
     if (gameState.inDebugMode) r.drawGrid("#404040");
@@ -674,12 +660,36 @@ function gameLoop(now) {
     if (gameState.player) drawEntity(gameState.player);
     renderHUD();
 
-    if (gameState.gameOver) { drawGameOverScreen(); return; }
-    if (gameState.playerWon) { drawVictoryScreen(); return; }
-    if (gameState.isInventoryOpen) { drawInventory(); requestAnimationFrame(gameLoop); return; }
-    if (gameState.isPaused) { drawPauseScreen(); requestAnimationFrame(gameLoop); return; }
-    if (gameState.isInCombat && gameState.currentEnemy) drawCombatScreen(gameState.player, gameState.currentEnemy);
-    if (gameState.showInfo) drawInfoScreen();
+    if (gameState.is(GAME_STATE.GAME_OVER)) {
+        drawGameOverScreen();
+        return;
+    }
+
+    if (gameState.is(GAME_STATE.VICTORY)) {
+        drawVictoryScreen();
+        return;
+    }
+
+    if (gameState.is(GAME_STATE.INVENTORY)) {
+        drawInventory();
+        requestAnimationFrame(gameLoop);
+        return;
+    }
+
+    if (gameState.is(GAME_STATE.PAUSED)) {
+        drawPauseScreen();
+        requestAnimationFrame(gameLoop);
+        return;
+    }
+
+    if (gameState.is(GAME_STATE.COMBAT) && combatData.currentEnemy) {
+        drawCombatScreen(gameState.player, combatData.currentEnemy);
+    }
+
+    if (gameState.is(GAME_STATE.PLAYING)) {
+        Enemy.tick(now, gameState.player);
+        if (infoData.message) drawInfoScreen();
+    }
 
     requestAnimationFrame(gameLoop);
 }
@@ -691,42 +701,52 @@ window.addEventListener("keydown", function (event) {
     if (event.repeat) return;
 
     if (event.key === "i" || event.key === "I") {
-        if (gameState.isInCombat) return;
+        if (gameState.is(GAME_STATE.COMBAT)) return;
         toggleInventory();
+        return;
     }
 
-    if (gameState.isInventoryOpen) {
-        const inv = gameState.player.inventory;
+    if (gameState.is(GAME_STATE.INVENTORY)) {
+        var inv = gameState.player.inventory;
         if (event.key === "w" || event.key === "ArrowUp") {
-            gameState.inventorySelectedIndex = (gameState.inventorySelectedIndex - 1 + inv.length) % inv.length;
+            inventoryData.selectedIndex = (inventoryData.selectedIndex - 1 + inv.length) % inv.length;
         }
         if (event.key === "s" || event.key === "ArrowDown") {
-            gameState.inventorySelectedIndex = (gameState.inventorySelectedIndex + 1 + inv.length) % inv.length;
+            inventoryData.selectedIndex = (inventoryData.selectedIndex + 1) % inv.length;
         }
         if (event.key === "Enter" || event.key === "e") {
-            const selected = inv[gameState.inventorySelectedIndex];
+            var selected = inv[inventoryData.selectedIndex];
             if (selected && typeof selected.onUse === "function") {
-                selected.onUse(gameState.player);
-                inv.splice(gameState.inventorySelectedIndex, 1);
-                gameState.inventorySelectedIndex = Math.min(gameState.inventorySelectedIndex, inv.length - 1);
+                var used = selected.onUse(gameState.player);
+                if (used) {
+                    inv.splice(inventoryData.selectedIndex, 1);
+                    inventoryData.selectedIndex = Math.min(inventoryData.selectedIndex, inv.length - 1);
+                }
             }
         }
         return;
     }
 
-    if (event.key === "p" || event.key === "P" || event.key === "Escape") { togglePause(); return; }
-    if (gameState.isPaused) return;
+    if (event.key === "p" || event.key === "P" || event.key === "Escape") {
+        togglePause();
+        return;
+    }
 
-    if (event.key === "~") gameState.inDebugMode = !gameState.inDebugMode;
+    if (gameState.is(GAME_STATE.PAUSED)) return;
 
-    if (gameState.isInCombat) {
+    if (event.key === "~") {
+        gameState.inDebugMode = !gameState.inDebugMode;
+        return;
+    }
+
+    if (gameState.is(GAME_STATE.COMBAT)) {
         if (event.key === " ") handleCombatAction();
         return;
     }
 
-    if (gameState.gameOver || gameState.playerWon) return;
+    if (gameState.is(GAME_STATE.GAME_OVER) || gameState.is(GAME_STATE.VICTORY)) return;
 
-    let direction = null;
+    var direction = null;
     if (event.key === "w") direction = "up";
     if (event.key === "s") direction = "down";
     if (event.key === "a") direction = "left";
@@ -740,14 +760,14 @@ window.addEventListener("keydown", function (event) {
 // ==================================================
 //  Initialization
 // ==================================================
-const appContainer = getById("root");
+var appContainer = getById("root");
 appContainer.appendChild(app());
 
 const canvasWidth = GRID_WIDTH * TILE_SIZE * SCALE;
 const canvasHeight = GRID_HEIGHT * TILE_SIZE * SCALE;
 
-const gameCanvas = getById("game");
-const r = new Renderer(gameCanvas, canvasWidth, canvasHeight);
+var gameCanvas = getById("game");
+var r = new Renderer(gameCanvas, canvasWidth, canvasHeight);
 
 window.onload = function () {
     startGame();
