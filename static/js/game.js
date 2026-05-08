@@ -510,13 +510,15 @@ function drawMap() {
             const tile = TILE_BY_ID[grid[row][col]];
             const x = Math.floor(col * TILE_SIZE);
             const y = Math.floor(row * TILE_SIZE);
-            const img = AssetManager.get(tile.sprite);
+            let img = AssetManager.get(tile.sprite);
             if (img) {
                 r.drawImage(img, x, y, TILE_SIZE, TILE_SIZE);
             } else if (tile === TILE_T.START) {
                 //r.drawRect(x, y, TILE_SIZE, TILE_SIZE, tile.color);
                 img = AssetManager.get(TILE_T.FLOOR.sprite)
                 r.drawImage(img, x, y, TILE_SIZE, TILE_SIZE);
+            }else {
+                r.drawRect(x, y, TILE_SIZE, TILE_SIZE, tile.color);
             }
         }
     }
