@@ -11,7 +11,11 @@ const TILE_T = {
     EMPTY: { id: 0, color: "#060606", sprite: "static/assets/textures/dirt.png", isWalkable: false, onStep: null },
     FLOOR: { id: 1, color: "#4e170d", sprite: "static/assets/textures/floor.png", isWalkable: true, onStep: null },
     WALL: { id: 2, color: "#101010", sprite: "static/assets/textures/wall.png", isWalkable: false, onStep: null },
-    WATER: { id: 3, color: "#1a3a6a", sprite: "static/assets/textures/water.png", isWalkable: true, onStep: null },
+    WATER: { id: 3, color: "#1a3a6a", sprite: "static/assets/textures/water.png", isWalkable: true, onStep: (entity) => {
+        if (entity === gameState.player) {
+            gameState.inputBlockedUntil = Date.now() + 500;
+        }
+    } },
     FIRE: {
         id: 4, color: "#ff6600", sprite: "static/assets/textures/lava.png", isWalkable: true, onStep: (entity) => {
             entity.takeDamage(10);
@@ -54,7 +58,8 @@ const gameState = {
     playerWon: false,
     showInfo: false,
     infoMessage: "",
-    infoTimeout: null
+    infoTimeout: null,
+    inputBlockedUntil: 0
 };
 
 // ==================================================
@@ -727,6 +732,9 @@ window.addEventListener("keydown", function (event) {
     }
 
     if (gameState.gameOver || gameState.playerWon) return;
+
+    // Check if directional inputs are blocked
+    if (Date.now() < gameState.inputBlockedUntil) return;
 
     let direction = null;
     if (event.key === "w") direction = "up";
